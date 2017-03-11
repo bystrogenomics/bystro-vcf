@@ -204,3 +204,155 @@ func TestLineIsValid(t *testing.T) {
 		t.Log("OK: multiallelics are not supported. lineIsValid() requires multiallelics to be split")
 	}
 }
+
+func TestMakeHetHomozygotes(t *testing.T) {
+	var actualHoms []string
+	var actualHets []string
+
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3", "S4"}
+
+	sharedFieldsGT := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT"}
+	sharedFieldsGTcomplex := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT:GL"}
+
+	fields := append(sharedFieldsGT, "0|0", "0|0", "0|0", "0|0")
+
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "1")
+
+	if len(actualHoms) == 0 && len(actualHets) == 0 {
+		t.Log("OK: Homozygous reference samples are skipped")
+	} else {
+		t.Error("0 alleles give unexpected results", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGT, "0|1", "0|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "1")
+
+	if len(actualHoms) == 0 && len(actualHets) == 4 {
+		t.Log("OK: handles hets")
+	} else {
+		t.Error("0 alleles give unexpected results", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGT, ".|1", "0|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "1")
+
+	if len(actualHoms) == 0 && len(actualHets) == 3 {
+		t.Log("OK: GT's containing missing data are entirely uncertain, therefore skipped")
+	} else {
+		t.Error("Fails to handle missing data", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGT, "1|1", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "1")
+
+	if len(actualHoms) == 2 && len(actualHets) == 2 {
+		t.Log("OK: handles homs and hets")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "1")
+
+	if len(actualHoms) == 1 && len(actualHets) == 3 {
+		t.Log("OK: a sample heterozygous for a wanted allele is heterozygous for that allele even if its other allele is unwanted (for multiallelic phasing)")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
+
+	if len(actualHoms) == 0 && len(actualHets) == 1 {
+		t.Log("OK: Het / homozygous status is based purely on the wanted allele, rather than total non-ref count")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGTcomplex, "1|2", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
+
+	if len(actualHoms) == 0 && len(actualHets) == 1 {
+		t.Log("OK: handles complicated GTs, with non-1 alleles")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGTcomplex, "1|2|1", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
+
+	if len(actualHoms) == 0 && len(actualHets) == 1 {
+		t.Log("OK: Complicated GT: Triploids are considered het if only 1 present desired allele")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGT, "1|2|1", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
+
+	if len(actualHoms) == 0 && len(actualHets) == 1 {
+		t.Log("OK: Triploids are considered het if only 1 present desired allele")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGTcomplex, "2|2|2", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
+
+	if len(actualHoms) == 1 && len(actualHets) == 0 {
+		t.Log("OK: Complicated GT: Triploids are considered hom only if all alleles present are desired")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	fields = append(sharedFieldsGT, "2|2|2", "1|1", "0|1", "0|1")
+
+	actualHoms = actualHoms[:0]
+	actualHets = actualHets[:0]
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
+
+	if len(actualHoms) == 1 && len(actualHets) == 0 {
+		t.Log("OK: Triploids are considered hom only if all alleles present are desired")
+	} else {
+		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+}

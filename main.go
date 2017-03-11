@@ -138,6 +138,11 @@ func main() {
 			// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
 			record := strings.Split(row[:len(row)-1], "\t")
 
+			if len(record) < len(header) {
+				log.Println("Truncated line. Skipping: ", record[0], record[1])
+				continue
+			}
+
 			if strings.Contains(record[4], ",") {
 				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, c)
 			} else {
@@ -159,9 +164,12 @@ func lineIsValid(alt string) bool {
 			return false
 		}
 	} else {
-		// This should be reasonably efficient; most non-ACTG alleles will be
-		// "." or "<" or "[" as the first character
-		for _, val := range alt {
+		// Most common case is <CNV|DUP|DEL>
+		if alt[0] != 'A' && alt[0] != 'C' && alt[0] != 'T' && alt[0] != 'G' {
+			return false
+		}
+
+		for _, val := range alt[1:] {
 			if val != 'A' && val != 'C' && val != 'T' && val != 'G' {
 				return false
 			}
@@ -185,7 +193,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 
 	for idx, allele := range strings.Split(record[4], ",") {
 		if lineIsValid(allele) == false {
-			log.Printf("Non-ACTG Alt #%d, skipping", idx+1, record[0], record[1])
+			log.Printf("Non-ACTG Alt #%d, skipping: %s %s", idx+1, record[0], record[1])
 			continue
 		}
 
@@ -196,7 +204,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		}
 
 		if pos == "" {
-			log.Printf("Invalid Alt #%d, skipping", idx+1, record[0], record[1])
+			log.Printf("Invalid Alt #%d, skipping: %s %s", idx+1, record[0], record[1])
 			continue
 		}
 
@@ -204,7 +212,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		var homs []string
 		var hets []string
 
-		err = makeHetHomozygotes(record, header, lastIndex, &homs, &hets, strconv.Itoa(idx+1))
+		err = makeHetHomozygotes(record, header, &homs, &hets, strconv.Itoa(idx+1))
 
 		if err != nil {
 			log.Fatal(err)
@@ -282,7 +290,7 @@ func processLine(record []string, header []string, lastIndex int,
 		return
 	}
 
-	err = makeHetHomozygotes(record, header, lastIndex, &homs, &hets, "1")
+	err = makeHetHomozygotes(record, header, &homs, &hets, "1")
 
 	if err != nil {
 		log.Fatal(err)
@@ -428,14 +436,15 @@ func updateFieldsWithAlt(ref string, alt string, pos string) (string, string, st
 	return siteType, pos, ref, alt, nil
 }
 
-func makeHetHomozygotes(fields []string, header []string, lastIdx int, homsArr *[]string, hetsArr *[]string, alleleIdx string) error {
+func makeHetHomozygotes(fields []string, header []string, homsArr *[]string, hetsArr *[]string, alleleIdx string) error {
 	simpleGT := fields[8] == "GT"
 
 	gt := make([]string, 0, 2)
 	gtCount := 0
 	altCount := 0
 
-	for i := 9; i <= lastIdx; i++ {
+SAMPLES:
+	for i := 9; i < len(header); i++ {
 		if strings.Contains(fields[i], "|") {
 			gt = strings.Split(fields[i], "|")
 		} else {
@@ -446,6 +455,10 @@ func makeHetHomozygotes(fields []string, header []string, lastIdx int, homsArr *
 		gtCount = 0
 		if simpleGT {
 			for _, val := range gt {
+				if val == "." {
+					continue SAMPLES
+				}
+
 				if val == alleleIdx {
 					altCount++
 				}
@@ -455,6 +468,10 @@ func makeHetHomozygotes(fields []string, header []string, lastIdx int, homsArr *
 		} else {
 
 			for _, val := range gt {
+				if val == "." {
+					continue SAMPLES
+				}
+
 				// val[0] doesn't work...because byte array?
 				if val[0:1] == alleleIdx {
 					altCount++
