@@ -89,7 +89,6 @@ func main() {
 		row, err := reader.ReadString('\n') // 0x0A separator = newline
 
 		if err == io.EOF {
-			// do something here
 			break
 		} else if err != nil {
 			log.Fatal(err)
@@ -109,11 +108,6 @@ func main() {
 				}
 
 				header = record
-
-				// spew.Dump(header)
-
-				// homs = make([]string, 0, len(header)-9)
-				// homs = make([]string, 0, len(header)-9)
 
 				foundHeader = true
 				break
@@ -256,7 +250,7 @@ func processLine(record []string, header []string, lastIndex int, emptyField *st
 	}
 
 	if pos == "" {
-		fmt.Fprint(os.Stderr, "NO POSS!!!", record)
+		return
 	}
 
 	// spew.Dump(hets)
