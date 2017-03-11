@@ -138,7 +138,8 @@ func main() {
 			// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
 			record := strings.Split(row[:len(row)-1], "\t")
 
-			if record[4] == "." || record[3] == record[4] || (record[3][0:1] != "A" && record[3][0:1] != "C" && record[3][0:1] != "T" && record[3][0:1] != "G") {
+			if record[4][0:1] == "." || (record[4][0:1] != "A" && record[4][0:1] != "C" && record[4][0:1] != "T" && record[4][0:1] != "G") {
+				log.Println("Non-ACTG Alt, skipping:", record[0], record[1])
 				continue
 			}
 
@@ -159,16 +160,20 @@ func main() {
 
 func processMultiLine(record []string, header []string, lastIndex int, emptyField *string,
 	fieldDelimiter *string, results chan<- string) {
-	var output bytes.Buffer
 
-	if record[0] != "c" && record[1] != "h" {
-		output.WriteString("chr")
-		output.WriteString(record[0])
-		output.WriteString("\t")
+	var chr string
+
+	if len(record[0]) < 4 || record[0][0:2] != "ch" {
+		var buff bytes.Buffer
+		buff.WriteString("chr")
+		buff.WriteString(record[0])
+
+		chr = buff.String()
 	}
 
 	for idx, allele := range strings.Split(record[4], ",") {
-		if allele[0:1] != "A" && allele[0:1] != "C" && allele[0:1] != "T" && allele[0:1] != "G" {
+		if allele[0:1] == "." || (allele[0:1] != "A" && allele[0:1] != "C" && allele[0:1] != "T" && allele[0:1] != "G") {
+			log.Printf("Non-ACTG Alt #%d, skipping", idx+1, record[0], record[1])
 			continue
 		}
 
@@ -179,6 +184,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		}
 
 		if pos == "" {
+			log.Printf("Invalid Alt #%d, skipping", idx+1, record[0], record[1])
 			continue
 		}
 
@@ -196,6 +202,15 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 			continue
 		}
 
+		var output bytes.Buffer
+
+		if chr != "" {
+			output.WriteString(chr)
+		} else {
+			output.WriteString(record[0])
+		}
+
+		output.WriteString("\t")
 		output.WriteString(pos)
 		output.WriteString("\t")
 		output.WriteString(siteType)
@@ -233,7 +248,7 @@ func processLine(record []string, header []string, lastIndex int,
 
 	var output bytes.Buffer
 
-	if record[0] != "c" && record[1] != "h" {
+	if len(record[0]) < 4 || record[0][0:2] != "ch" {
 		output.WriteString("chr")
 		output.WriteString(record[0])
 		output.WriteString("\t")
@@ -246,6 +261,7 @@ func processLine(record []string, header []string, lastIndex int,
 	}
 
 	if pos == "" {
+		log.Println("Invalid Alt, skipping: ", record[0], record[1])
 		return
 	}
 
@@ -293,7 +309,7 @@ func updateFieldsWithAlt(ref string, alt string, pos string) (string, string, st
 
 	if len(alt) == len(ref) {
 		if alt == ref {
-			// We don't support MNPs and more complex snps
+			// No point in returning ref sites
 			return "", "", "", "", nil
 		}
 
