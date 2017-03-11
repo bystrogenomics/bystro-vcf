@@ -138,11 +138,6 @@ func main() {
 			// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
 			record := strings.Split(row[:len(row)-1], "\t")
 
-			if record[4][0:1] == "." || (record[4][0:1] != "A" && record[4][0:1] != "C" && record[4][0:1] != "T" && record[4][0:1] != "G") {
-				log.Println("Non-ACTG Alt, skipping:", record[0], record[1])
-				continue
-			}
-
 			if strings.Contains(record[4], ",") {
 				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, c)
 			} else {
@@ -158,9 +153,24 @@ func main() {
 	}
 }
 
+func lineIsValid(alt string) bool {
+	if len(alt) == 1 {
+		if alt != "A" && alt != "C" && alt != "T" && alt != "G" {
+			return false
+		}
+	} else {
+		for _, val := range alt {
+			if val != 'A' && val != 'C' && val != 'T' && val != 'G' {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 func processMultiLine(record []string, header []string, lastIndex int, emptyField *string,
 	fieldDelimiter *string, results chan<- string) {
-
 	var chr string
 
 	if len(record[0]) < 4 || record[0][0:2] != "ch" {
@@ -172,7 +182,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 	}
 
 	for idx, allele := range strings.Split(record[4], ",") {
-		if allele[0:1] == "." || (allele[0:1] != "A" && allele[0:1] != "C" && allele[0:1] != "T" && allele[0:1] != "G") {
+		if lineIsValid(allele) == false {
 			log.Printf("Non-ACTG Alt #%d, skipping", idx+1, record[0], record[1])
 			continue
 		}
@@ -243,6 +253,11 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 
 func processLine(record []string, header []string, lastIndex int,
 	emptyField *string, fieldDelimiter *string, results chan<- string) {
+	if lineIsValid(record[4]) == false {
+		log.Println("Non-ACTG Alt, skipping: ", record[0], record[1])
+		return
+	}
+
 	var homs []string
 	var hets []string
 

@@ -123,3 +123,84 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 		t.Log("OK: Insertions where reference and alt don't share a left edge are skipped")
 	}
 }
+
+func TestLineIsValid(t *testing.T) {
+	expect := true
+
+	actual := lineIsValid("ACTG")
+
+	if expect != actual {
+		t.Error()
+	} else {
+		t.Log("Support ACTG-containing alleles")
+	}
+
+	expect = false
+	actual = lineIsValid(".")
+
+	if expect != actual {
+		t.Error("Can't handle missing Alt alleles")
+	} else {
+		t.Log("OK: Handles missing Alt alleles")
+	}
+
+	expect = false
+	actual = lineIsValid("]13 : 123456]T")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend ']13 : 123456]T'")
+	}
+
+	expect = false
+	actual = lineIsValid("C[2 : 321682[")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend 'C[2 : 321682['")
+	}
+
+	expect = false
+	actual = lineIsValid(".A")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend '.A'")
+	}
+
+	expect = false
+	actual = lineIsValid("G.")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend 'G.'")
+	}
+
+	expect = false
+	actual = lineIsValid("<DUP>")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle complex tags")
+	} else {
+		t.Log("OK: Handles complex Alt tags '<DUP>'")
+	}
+
+	expect = false
+	actual = lineIsValid("A,C")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Allows multiallelics", actual)
+	} else {
+		t.Log("OK: multiallelics are not supported. lineIsValid() requires multiallelics to be split")
+	}
+}
