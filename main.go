@@ -240,7 +240,7 @@ func processMultiLine(record []string, header []string, lastIndex int, lenRef in
 		}else if len(hets) == 0 {
 			output.WriteString(strings.Join(homs, ","))
 			output.WriteString("\t")
-			output.WriteString("*emptyField")
+			output.WriteString(*emptyField)
 		}
 
 		output.WriteString("\t")
@@ -296,7 +296,7 @@ func processLine(record []string, header []string, lastIndex int, lenRef int, em
 	}else if len(hets) == 0 {
 		output.WriteString(strings.Join(homs, ","))
 		output.WriteString("\t")
-		output.WriteString("*emptyField")
+		output.WriteString(*emptyField)
 	}
 
 	output.WriteString("\t")
