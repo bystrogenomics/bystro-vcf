@@ -292,9 +292,33 @@ func updateFieldsWithAlt(ref string, alt string, pos string) (string, string, st
 	var siteType string
 
 	if len(alt) == len(ref) {
-		if len(ref) > 1 {
-			// We don't support MNPs
+		if alt == ref {
+			// We don't support MNPs and more complex snps
 			return "", "", "", "", nil
+		}
+
+		if len(ref) > 1 {
+			count := 0
+			var diffIdx int
+			for index, _ := range ref {
+				if ref[index] != alt[index] {
+					if count != 0 {
+						// MNPs are not supported
+						return "", "", "", "", nil
+					}
+
+					count += 1
+					diffIdx = index
+				}
+			}
+
+			intPos, err := strconv.Atoi(pos)
+
+			if err != nil {
+				return "", "", "", "", err
+			}
+
+			return "SNP", strconv.Itoa(intPos + diffIdx), ref[diffIdx : diffIdx+1], alt[diffIdx : diffIdx+1], nil
 		}
 
 		return "SNP", pos, ref, alt, nil
@@ -303,43 +327,68 @@ func updateFieldsWithAlt(ref string, alt string, pos string) (string, string, st
 	if len(ref) > len(alt) {
 		siteType = "DEL"
 
-		alt = strconv.Itoa(len(alt) - len(ref))
 		intPos, err := strconv.Atoi(pos)
 
 		if err != nil {
 			return "", "", "", "", err
 		}
 
-		pos = strconv.Itoa(intPos + len(alt))
-		ref = ref[1:2]
+		if len(alt) == 1 {
+			if ref[0] != alt[0] {
+				return "", "", "", "", nil
+			}
+
+			alt = strconv.Itoa(1 - len(ref))
+			pos = strconv.Itoa(intPos + 1)
+			ref = ref[1:2]
+		} else {
+			altLen := len(alt)
+
+			if ref[0:altLen] != alt {
+				return "", "", "", "", nil
+			}
+
+			pos = strconv.Itoa(intPos + altLen)
+			alt = strconv.Itoa(altLen - len(ref))
+			ref = ref[altLen : altLen+1]
+		}
 	} else {
 		siteType = "INS"
-		var insBuffer bytes.Buffer
-		insBuffer.WriteString("+")
-		insBuffer.WriteString(alt[len(ref):])
-
-		alt = insBuffer.String()
 
 		// Most cases are simple, handle complex ones as well
 		if len(ref) > 1 {
 			insIndex := strings.Index(alt, ref)
 
-			if insIndex == -1 {
+			if insIndex != 0 {
 				return "", "", "", "", nil
 			}
 
-			if insIndex != 0 {
-				log.Println("Don't support complex insertion alleles")
-			}
-
 			intPos, err := strconv.Atoi(pos)
+
 			if err != nil {
 				log.Fatal("Failed to convert position to integer")
 			}
 
 			intPos = intPos + len(ref) - 1
 			pos = strconv.Itoa(intPos)
+
+			var insBuffer bytes.Buffer
+			insBuffer.WriteString("+")
+			insBuffer.WriteString(alt[len(ref):])
+
+			alt = insBuffer.String()
+
 			ref = ref[len(ref)-1:]
+		} else {
+			if ref[0] != alt[0] {
+				return "", "", "", "", nil
+			}
+
+			var insBuffer bytes.Buffer
+			insBuffer.WriteString("+")
+			insBuffer.WriteString(alt[1:])
+
+			alt = insBuffer.String()
 		}
 	}
 
