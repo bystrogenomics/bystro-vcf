@@ -71,8 +71,6 @@ func main() {
 
 	reader := bufio.NewReader(inFh)
 
-	var record []string
-
 	foundHeader := false
 	// checkedChrType := false
 
@@ -80,22 +78,15 @@ func main() {
 	header := make([]string, 0, 10000)
 
 	var lastIndex int
-	var lenRef int
-
-	var row string
-	var err error
 
 	c := make(chan string)
-	// jobs := make(chan []string])
-	//  results := make(chan int)
 
-	// wg := new(sync.WaitGroup)
 	for {
 		// http://stackoverflow.com/questions/8757389/reading-file-line-by-line-in-go
 		// http://www.jeffduckett.com/blog/551119d6c6b86364cef12da7/golang---read-a-file-line-by-line.html
 		// Scanner doesn't work well, has buffer restrictions that we need to manually get around
 		// and we don't expect any newline characters in a Seqant output body
-		row, err = reader.ReadString('\n') // 0x0A separator = newline
+		row, err := reader.ReadString('\n') // 0x0A separator = newline
 
 		if err == io.EOF {
 			// do something here
@@ -106,9 +97,7 @@ func main() {
 
 		// // remove the trailing \n
 		// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
-		row = row[:len(row)-1]
-
-		record = strings.Split(row, "\t")
+		record := strings.Split(row[:len(row)-1], "\t")
 
 		if foundHeader == false {
 			if record[0] == "#CHROM" {
@@ -136,7 +125,7 @@ func main() {
 
 	go func() {
 		for {
-			row, err = reader.ReadString('\n') // 0x0A separator = newline
+			row, err := reader.ReadString('\n') // 0x0A separator = newline
 
 			if err == io.EOF {
 				// do something here
@@ -147,9 +136,7 @@ func main() {
 
 			// // remove the trailing \n
 			// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
-			row = row[:len(row)-1]
-
-			record = strings.Split(row, "\t")
+			record := strings.Split(row[:len(row)-1], "\t")
 
 			// spew.Dump(record)
 			if record[4] == "." || record[3] == record[4] || (record[3][0:1] != "A" && record[3][0:1] != "C" && record[3][0:1] != "T" && record[3][0:1] != "G") {
@@ -160,34 +147,22 @@ func main() {
 			// hets = homs[:0]
 
 			if strings.Contains(record[4], ",") {
-				go processMultiLine(record, header, lastIndex, lenRef, emptyField, c)
+				go processMultiLine(record, header, lastIndex, emptyField, c)
 			} else {
-				go processLine(record, header, lastIndex, lenRef, emptyField, c)
+				go processLine(record, header, lastIndex, emptyField, c)
 			}
 
 		}
 	}()
 
-	count := 0
-	records := make([]string, 0, 100000)
+	// Write all the data
+	// Somewhat surprisingly this is faster than building up array and writing in builk
 	for data := range c {
-		count++
-
-		if count > 100000 {
-			fmt.Println(strings.Join(records, "\n"))
-			records = records[:0]
-			count = 0
-		}
-
-		records = append(records, data)
-	}
-
-	if len(records) {
-		fmt.Println(strings.Join(records, "\n"))
+		fmt.Println(data)
 	}
 }
 
-func processMultiLine(record []string, header []string, lastIndex int, lenRef int, emptyField *string, results chan<- string) {
+func processMultiLine(record []string, header []string, lastIndex int, emptyField *string, results chan<- string) {
 	var err error
 	var output bytes.Buffer
 
@@ -212,7 +187,7 @@ func processMultiLine(record []string, header []string, lastIndex int, lenRef in
 		var hets []string
 
 		// fmt.Printf("%d %s", idx+1, strconv.Itoa(idx+1))
-		err = makeHesHomozygotes(record, header, lastIndex, &homs, &hets, strconv.Itoa(idx+1))
+		err = makeHetHomozygotes(record, header, lastIndex, &homs, &hets, strconv.Itoa(idx+1))
 
 		if err != nil {
 			log.Fatal(err)
@@ -224,35 +199,40 @@ func processMultiLine(record []string, header []string, lastIndex int, lenRef in
 
 		siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], allele, record[1])
 
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		output.WriteString(pos)
 		output.WriteString("\t")
 		output.WriteString(siteType)
 		output.WriteString("\t")
 
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		if len(homs) == 0 {
 			output.WriteString(*emptyField)
-			output.WriteString("\t")
-			output.WriteString(strings.Join(hets, ","))
-		}else if len(hets) == 0 {
+		} else {
 			output.WriteString(strings.Join(homs, ","))
-			output.WriteString("\t")
+		}
+
+		output.WriteString("\t")
+
+		if len(hets) == 0 {
 			output.WriteString(*emptyField)
+		} else {
+			output.WriteString(strings.Join(hets, ","))
 		}
 
 		output.WriteString("\t")
 		output.WriteString(ref)
 		output.WriteString("\t")
 		output.WriteString(alt)
+		output.WriteString("\n")
 
 		results <- output.String()
 	}
 }
 
-func processLine(record []string, header []string, lastIndex int, lenRef int, emptyField *string, results chan<- string) {
+func processLine(record []string, header []string, lastIndex int, emptyField *string, results chan<- string) {
 	var homs []string
 	var hets []string
 
@@ -264,7 +244,8 @@ func processLine(record []string, header []string, lastIndex int, lenRef int, em
 		output.WriteString("\t")
 	}
 
-	err := makeHesHomozygotes(record, header, lastIndex, &homs, &hets, "")
+	// spew.Dump(hets)
+	err := makeHetHomozygotes(record, header, lastIndex, &homs, &hets, "1")
 
 	if err != nil {
 		log.Fatal(err)
@@ -283,26 +264,29 @@ func processLine(record []string, header []string, lastIndex int, lenRef int, em
 	output.WriteString(pos)
 	output.WriteString("\t")
 	output.WriteString(siteType)
-	output.WriteString("\t")
 
-	if err != nil {
-		log.Fatal(err)
-	}
+	output.WriteString("\t")
 
 	if len(homs) == 0 {
 		output.WriteString(*emptyField)
-		output.WriteString("\t")
-		output.WriteString(strings.Join(hets, ","))
-	}else if len(hets) == 0 {
+	} else {
 		output.WriteString(strings.Join(homs, ","))
-		output.WriteString("\t")
-		output.WriteString(*emptyField)
 	}
 
 	output.WriteString("\t")
+
+	if len(hets) == 0 {
+		output.WriteString(*emptyField)
+	} else {
+		output.WriteString(strings.Join(hets, ","))
+	}
+
+	output.WriteString("\t")
+
 	output.WriteString(ref)
 	output.WriteString("\t")
 	output.WriteString(alt)
+	output.WriteString("\n")
 
 	results <- output.String()
 }
@@ -322,9 +306,6 @@ func updateFieldsWithAlt(ref string, alt string, pos string) (string, string, st
 	if len(ref) > len(alt) {
 		siteType = "DEL"
 
-		// intPos, err := len(record[4]) - lenRef
-		// altString = strconv.Itoa(length)
-		// pos = strconv.Itoa(length)
 		alt = strconv.Itoa(len(alt) - len(ref))
 		intPos, err := strconv.Atoi(pos)
 
@@ -368,7 +349,7 @@ func updateFieldsWithAlt(ref string, alt string, pos string) (string, string, st
 	return siteType, pos, ref, alt, nil
 }
 
-func makeHesHomozygotes(fields []string, header []string, lastIdx int, homsArr *[]string, hetsArr *[]string, alleleIdx string) error {
+func makeHetHomozygotes(fields []string, header []string, lastIdx int, homsArr *[]string, hetsArr *[]string, alleleIdx string) error {
 	simpleGT := fields[8] == "GT"
 
 	gt := make([]string, 0, 2)
@@ -386,10 +367,8 @@ func makeHesHomozygotes(fields []string, header []string, lastIdx int, homsArr *
 		gtCount = 0
 		if simpleGT {
 			for _, val := range gt {
-				if val != "0" {
-					if alleleIdx == "" || val == alleleIdx {
-						altCount++
-					}
+				if val == alleleIdx {
+					altCount++
 				}
 
 				gtCount++
@@ -400,12 +379,8 @@ func makeHesHomozygotes(fields []string, header []string, lastIdx int, homsArr *
 				// val[0] doesn't work...
 				// fmt.Printf("Genotype %s, %s", gt, val[0:1])
 
-				if val[0:1] != "0" {
-					// fmt.Println("alt wasn't 0")
-					if alleleIdx == "" || val[0:1] == alleleIdx {
-						altCount++
-					}
-
+				if val[0:1] == alleleIdx {
+					altCount++
 				}
 
 				gtCount++
