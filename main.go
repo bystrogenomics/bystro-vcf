@@ -159,6 +159,8 @@ func lineIsValid(alt string) bool {
 			return false
 		}
 	} else {
+		// This should be reasonably efficient; most non-ACTG alleles will be
+		// "." or "<" or "[" as the first character
 		for _, val := range alt {
 			if val != 'A' && val != 'C' && val != 'T' && val != 'G' {
 				return false
