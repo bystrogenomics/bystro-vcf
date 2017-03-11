@@ -129,6 +129,7 @@ func main() {
 
 			if err == io.EOF {
 				// do something here
+				close(c)
 				break
 			} else if err != nil {
 				log.Fatal(err)
@@ -151,22 +152,21 @@ func main() {
 			} else {
 				go processLine(record, header, lastIndex, emptyField, c)
 			}
-
 		}
 	}()
 
 	// Write all the data
 	// Somewhat surprisingly this is faster than building up array and writing in builk
 	for data := range c {
-		fmt.Println(data)
+		fmt.Print(data)
 	}
+
 }
 
 func processMultiLine(record []string, header []string, lastIndex int, emptyField *string, results chan<- string) {
-	var err error
 	var output bytes.Buffer
 
-	if strings.Contains(record[0], "chr") == false {
+	if record[0] != "c" && record[1] != "h" {
 		output.WriteString("chr")
 		output.WriteString(record[0])
 		output.WriteString("\t")
@@ -179,6 +179,16 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 
 	for idx, allele := range strings.Split(record[4], ",") {
 		if allele[0:1] != "A" && allele[0:1] != "C" && allele[0:1] != "T" && allele[0:1] != "G" {
+			continue
+		}
+
+		siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], allele, record[1])
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if pos == "" {
 			continue
 		}
 
@@ -197,22 +207,13 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 			continue
 		}
 
-		siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], allele, record[1])
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		output.WriteString(pos)
 		output.WriteString("\t")
 		output.WriteString(siteType)
 		output.WriteString("\t")
-
-		if len(homs) == 0 {
-			output.WriteString(*emptyField)
-		} else {
-			output.WriteString(strings.Join(homs, ","))
-		}
+		output.WriteString(ref)
+		output.WriteString("\t")
+		output.WriteString(alt)
 
 		output.WriteString("\t")
 
@@ -223,9 +224,13 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		}
 
 		output.WriteString("\t")
-		output.WriteString(ref)
-		output.WriteString("\t")
-		output.WriteString(alt)
+
+		if len(homs) == 0 {
+			output.WriteString(*emptyField)
+		} else {
+			output.WriteString(strings.Join(homs, ","))
+		}
+
 		output.WriteString("\n")
 
 		results <- output.String()
@@ -238,14 +243,24 @@ func processLine(record []string, header []string, lastIndex int, emptyField *st
 
 	var output bytes.Buffer
 
-	if strings.Contains(record[0], "chr") == false {
+	if record[0] != "c" && record[1] != "h" {
 		output.WriteString("chr")
 		output.WriteString(record[0])
 		output.WriteString("\t")
 	}
 
+	siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], record[4], record[1])
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if pos == "" {
+		fmt.Fprint(os.Stderr, "NO POSS!!!", record)
+	}
+
 	// spew.Dump(hets)
-	err := makeHetHomozygotes(record, header, lastIndex, &homs, &hets, "1")
+	err = makeHetHomozygotes(record, header, lastIndex, &homs, &hets, "1")
 
 	if err != nil {
 		log.Fatal(err)
@@ -255,23 +270,13 @@ func processLine(record []string, header []string, lastIndex int, emptyField *st
 		return
 	}
 
-	siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], record[4], record[1])
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	output.WriteString(pos)
 	output.WriteString("\t")
 	output.WriteString(siteType)
-
 	output.WriteString("\t")
-
-	if len(homs) == 0 {
-		output.WriteString(*emptyField)
-	} else {
-		output.WriteString(strings.Join(homs, ","))
-	}
+	output.WriteString(ref)
+	output.WriteString("\t")
+	output.WriteString(alt)
 
 	output.WriteString("\t")
 
@@ -283,9 +288,12 @@ func processLine(record []string, header []string, lastIndex int, emptyField *st
 
 	output.WriteString("\t")
 
-	output.WriteString(ref)
-	output.WriteString("\t")
-	output.WriteString(alt)
+	if len(homs) == 0 {
+		output.WriteString(*emptyField)
+	} else {
+		output.WriteString(strings.Join(homs, ","))
+	}
+
 	output.WriteString("\n")
 
 	results <- output.String()
