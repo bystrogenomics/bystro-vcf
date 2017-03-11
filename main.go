@@ -30,6 +30,7 @@ func main() {
 	inputFilePath := flag.String("inPath", "", "The input file path (optional: default is stdin)")
 	errPath := flag.String("errPath", "", "The output path for the JSON output (optional)")
 	emptyField := flag.String("emptyField", "!", "The output path for the JSON output (optional)")
+	fieldDelimiter := flag.String("fieldDelimiter", ";", "The output path for the JSON output (optional)")
 	// chrPrefix := flag.Bool("ucscChr", "", "Whether or not to use UCSC style chromosome designations, i.e chrX")
 
 	cpuprofile := flag.String("cpuProfile", "", "write cpu profile to file")
@@ -75,7 +76,7 @@ func main() {
 	// checkedChrType := false
 
 	//Predeclar sampleNames to be a large item
-	header := make([]string, 0, 10000)
+	var header []string
 
 	var lastIndex int
 
@@ -115,7 +116,11 @@ func main() {
 		}
 	}
 
-	// spew.Dump(header)
+	// TODO: will we be more efficient if we pre-make these and clear them each round?
+	// homSingle := make([]string, 0, lastIndx-8)
+	// hetsSingle := make([]string, 0, lastIndx-8)
+	// homMulti := make([]string, 0, lastIndx-8)
+	// hetsMulti := make([]string, 0, lastIndx-8)
 
 	go func() {
 		for {
@@ -133,18 +138,14 @@ func main() {
 			// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
 			record := strings.Split(row[:len(row)-1], "\t")
 
-			// spew.Dump(record)
 			if record[4] == "." || record[3] == record[4] || (record[3][0:1] != "A" && record[3][0:1] != "C" && record[3][0:1] != "T" && record[3][0:1] != "G") {
 				continue
 			}
 
-			// homs = homs[:0]
-			// hets = homs[:0]
-
 			if strings.Contains(record[4], ",") {
-				go processMultiLine(record, header, lastIndex, emptyField, c)
+				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, c)
 			} else {
-				go processLine(record, header, lastIndex, emptyField, c)
+				go processLine(record, header, lastIndex, emptyField, fieldDelimiter, c)
 			}
 		}
 	}()
@@ -154,10 +155,10 @@ func main() {
 	for data := range c {
 		fmt.Print(data)
 	}
-
 }
 
-func processMultiLine(record []string, header []string, lastIndex int, emptyField *string, results chan<- string) {
+func processMultiLine(record []string, header []string, lastIndex int, emptyField *string,
+	fieldDelimiter *string, results chan<- string) {
 	var output bytes.Buffer
 
 	if record[0] != "c" && record[1] != "h" {
@@ -165,11 +166,6 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		output.WriteString(record[0])
 		output.WriteString("\t")
 	}
-	// altAlleles := strings.Split(record[4], ",")
-
-	// spew.Dump(altAlleles)
-
-	// records := make([]string, 0, len(altAlleles))
 
 	for idx, allele := range strings.Split(record[4], ",") {
 		if allele[0:1] != "A" && allele[0:1] != "C" && allele[0:1] != "T" && allele[0:1] != "G" {
@@ -190,7 +186,6 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		var homs []string
 		var hets []string
 
-		// fmt.Printf("%d %s", idx+1, strconv.Itoa(idx+1))
 		err = makeHetHomozygotes(record, header, lastIndex, &homs, &hets, strconv.Itoa(idx+1))
 
 		if err != nil {
@@ -214,7 +209,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		if len(hets) == 0 {
 			output.WriteString(*emptyField)
 		} else {
-			output.WriteString(strings.Join(hets, ","))
+			output.WriteString(strings.Join(hets, *fieldDelimiter))
 		}
 
 		output.WriteString("\t")
@@ -222,7 +217,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		if len(homs) == 0 {
 			output.WriteString(*emptyField)
 		} else {
-			output.WriteString(strings.Join(homs, ","))
+			output.WriteString(strings.Join(homs, *fieldDelimiter))
 		}
 
 		output.WriteString("\n")
@@ -231,7 +226,8 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 	}
 }
 
-func processLine(record []string, header []string, lastIndex int, emptyField *string, results chan<- string) {
+func processLine(record []string, header []string, lastIndex int,
+	emptyField *string, fieldDelimiter *string, results chan<- string) {
 	var homs []string
 	var hets []string
 
@@ -253,7 +249,6 @@ func processLine(record []string, header []string, lastIndex int, emptyField *st
 		return
 	}
 
-	// spew.Dump(hets)
 	err = makeHetHomozygotes(record, header, lastIndex, &homs, &hets, "1")
 
 	if err != nil {
@@ -277,7 +272,7 @@ func processLine(record []string, header []string, lastIndex int, emptyField *st
 	if len(hets) == 0 {
 		output.WriteString(*emptyField)
 	} else {
-		output.WriteString(strings.Join(hets, ","))
+		output.WriteString(strings.Join(hets, *fieldDelimiter))
 	}
 
 	output.WriteString("\t")
@@ -285,7 +280,7 @@ func processLine(record []string, header []string, lastIndex int, emptyField *st
 	if len(homs) == 0 {
 		output.WriteString(*emptyField)
 	} else {
-		output.WriteString(strings.Join(homs, ","))
+		output.WriteString(strings.Join(homs, *fieldDelimiter))
 	}
 
 	output.WriteString("\n")
@@ -378,9 +373,7 @@ func makeHetHomozygotes(fields []string, header []string, lastIdx int, homsArr *
 		} else {
 
 			for _, val := range gt {
-				// val[0] doesn't work...
-				// fmt.Printf("Genotype %s, %s", gt, val[0:1])
-
+				// val[0] doesn't work...because byte array?
 				if val[0:1] == alleleIdx {
 					altCount++
 				}
@@ -399,9 +392,6 @@ func makeHetHomozygotes(fields []string, header []string, lastIdx int, homsArr *
 			*hetsArr = append(*hetsArr, header[i])
 		}
 	}
-
-	// spew.Dump(hetsArr)
-	// spew.Dump(homsArr)
 
 	return nil
 }
