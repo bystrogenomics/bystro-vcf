@@ -121,6 +121,7 @@ func main() {
 	// hetsSingle := make([]string, 0, lastIndx-8)
 	// homMulti := make([]string, 0, lastIndx-8)
 	// hetsMulti := make([]string, 0, lastIndx-8)
+	normalizeSampleNames(header)
 
 	go func() {
 		for {
@@ -493,6 +494,12 @@ SAMPLES:
 	}
 
 	return nil
+}
+
+func normalizeSampleNames(header []string) {
+	for i := 9; i < len(header); i++ {
+		header[i] = strings.Replace(header[i], ".", "_", -1)
+	}
 }
 
 // func coercePositionsAlleles(emptyField string, primaryDelim string) func(string) bool {
