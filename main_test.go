@@ -215,7 +215,9 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3", "S4"}
 
 	sharedFieldsGT := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT"}
-	sharedFieldsGTcomplex := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT:GL"}
+
+	// GT:DS:GL is what 1000 genomes phase 1 provides
+	sharedFieldsGTcomplex := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT:DS:GL"}
 
 	fields := append(sharedFieldsGT, "0|0", "0|0", "0|0", "0|0")
 
@@ -293,7 +295,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
-	fields = append(sharedFieldsGTcomplex, "1|2", "1|1", "0|1", "0|1")
+	fields = append(sharedFieldsGTcomplex, "1|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	actualHoms = actualHoms[:0]
 	actualHets = actualHets[:0]
@@ -301,12 +303,12 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
-		t.Log("OK: handles complicated GTs, with non-1 alleles")
+		t.Log("OK: handles complicated GTs, with non-1 alleles", fields)
 	} else {
 		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
-	fields = append(sharedFieldsGTcomplex, "1|2|1", "1|1", "0|1", "0|1")
+	fields = append(sharedFieldsGTcomplex, "1|2|1:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	actualHoms = actualHoms[:0]
 	actualHets = actualHets[:0]
@@ -314,7 +316,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
-		t.Log("OK: Complicated GT: Triploids are considered het if only 1 present desired allele")
+		t.Log("OK: Complicated GT: Triploids are considered het if only 1 present desired allele", fields)
 	} else {
 		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
 	}
@@ -332,7 +334,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
-	fields = append(sharedFieldsGTcomplex, "2|2|2", "1|1", "0|1", "0|1")
+	fields = append(sharedFieldsGTcomplex, "2|2|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	actualHoms = actualHoms[:0]
 	actualHets = actualHets[:0]
@@ -340,7 +342,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	makeHetHomozygotes(fields, header, &actualHoms, &actualHets, "2")
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
-		t.Log("OK: Complicated GT: Triploids are considered hom only if all alleles present are desired")
+		t.Log("OK: Complicated GT: Triploids are considered hom only if all alleles present are desired", fields)
 	} else {
 		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
 	}
