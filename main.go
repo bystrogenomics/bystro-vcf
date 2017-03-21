@@ -16,6 +16,7 @@ import (
 	// "sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	// "github.com/davecgh/go-spew/spew"
 	// "math/big"
@@ -81,6 +82,8 @@ func main() {
 	var lastIndex int
 
 	c := make(chan string)
+	// I think we need a wait group, not sure.
+	wg := new(sync.WaitGroup)
 
 	for {
 		// http://stackoverflow.com/questions/8757389/reading-file-line-by-line-in-go
@@ -123,13 +126,12 @@ func main() {
 	// hetsMulti := make([]string, 0, lastIndx-8)
 	normalizeSampleNames(header)
 
+	log.Printf("Found %d lines in the header", len(header))
 	go func() {
 		for {
 			row, err := reader.ReadString('\n') // 0x0A separator = newline
 
 			if err == io.EOF {
-				// do something here
-				close(c)
 				break
 			} else if err != nil {
 				log.Fatal(err)
@@ -144,12 +146,16 @@ func main() {
 				continue
 			}
 
+			wg.Add(1)
 			if strings.Contains(record[4], ",") {
-				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, c)
+				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, c, wg)
 			} else {
-				go processLine(record, header, lastIndex, emptyField, fieldDelimiter, c)
+				go processLine(record, header, lastIndex, emptyField, fieldDelimiter, c, wg)
 			}
 		}
+
+		wg.Wait()
+		close(c)
 	}()
 
 	// Write all the data
@@ -181,7 +187,10 @@ func lineIsValid(alt string) bool {
 }
 
 func processMultiLine(record []string, header []string, lastIndex int, emptyField *string,
-	fieldDelimiter *string, results chan<- string) {
+	fieldDelimiter *string, results chan<- string, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
 	var chr string
 
 	if len(record[0]) < 4 || record[0][0:2] != "ch" {
@@ -263,7 +272,9 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 }
 
 func processLine(record []string, header []string, lastIndex int,
-	emptyField *string, fieldDelimiter *string, results chan<- string) {
+	emptyField *string, fieldDelimiter *string, results chan<- string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	if lineIsValid(record[4]) == false {
 		log.Println("Non-ACTG Alt, skipping: ", record[0], record[1])
 		return
