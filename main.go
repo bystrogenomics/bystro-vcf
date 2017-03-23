@@ -107,9 +107,9 @@ func main() {
 
 				lastIndex = len(record) - 1
 
-				if lastIndex < 9 {
-					log.Fatal("Expected to find at least 1 sample, 0 found")
-				}
+				//if lastIndex < 9 {
+				//	log.Fatal("Expected to find at least 1 sample, 0 found")
+				//}
 
 				header = record
 
@@ -201,6 +201,8 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		chr = buff.String()
 	}
 
+	var homs []string
+	var hets []string
 	for idx, allele := range strings.Split(record[4], ",") {
 		if lineIsValid(allele) == false {
 			log.Printf("Non-ACTG Alt #%d, skipping: %s %s", idx+1, record[0], record[1])
@@ -218,18 +220,20 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 			continue
 		}
 
-		// Attempt at reducing malloc
-		var homs []string
-		var hets []string
+		// If no sampels are provided, annotate what we can, skipping hets and homs
+		if len(header) > 9 {
+			homs = homs[:0]
+			hets = hets[:0]
 
-		err = makeHetHomozygotes(record, header, &homs, &hets, strconv.Itoa(idx+1))
+			err = makeHetHomozygotes(record, header, &homs, &hets, strconv.Itoa(idx+1))
 
-		if err != nil {
-			log.Fatal(err)
-		}
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		if len(homs) == 0 && len(hets) == 0 {
-			continue
+			if len(homs) == 0 && len(hets) == 0 {
+				continue
+			}
 		}
 
 		var output bytes.Buffer
@@ -302,14 +306,17 @@ func processLine(record []string, header []string, lastIndex int,
 		return
 	}
 
-	err = makeHetHomozygotes(record, header, &homs, &hets, "1")
+	// If no sampels are provided, annotate what we can, skipping hets and homs
+	if len(header) > 9 {
+		err = makeHetHomozygotes(record, header, &homs, &hets, "1")
 
-	if err != nil {
-		log.Fatal(err)
-	}
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	if len(homs) == 0 && len(hets) == 0 {
-		return
+		if len(homs) == 0 && len(hets) == 0 {
+			return
+		}
 	}
 
 	output.WriteString(pos)
