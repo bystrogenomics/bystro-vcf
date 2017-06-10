@@ -30,12 +30,20 @@ import (
 func main() {
 	inputFilePath := flag.String("inPath", "", "The input file path (optional: default is stdin)")
 	errPath := flag.String("errPath", "", "The output path for the JSON output (optional)")
-	emptyField := flag.String("emptyField", "!", "The output path for the JSON output (optional)")
-	fieldDelimiter := flag.String("fieldDelimiter", ";", "The output path for the JSON output (optional)")
+	emptyFieldOpt := flag.String("emptyField", "!", "The output path for the JSON output (optional)")
+	fieldDelimiterOpt := flag.String("fieldDelimiter", ";", "The output path for the JSON output (optional)")
+	retainInfoOpt := flag.Bool("retainInfo", false, "Should we retain INFO field data (if so, will output 2 additional fields, the index of the allele (to handle multiallelic segregation of INFO data properly), and the INFO field")
 	// chrPrefix := flag.Bool("ucscChr", "", "Whether or not to use UCSC style chromosome designations, i.e chrX")
 
 	cpuprofile := flag.String("cpuProfile", "", "write cpu profile to file")
 	flag.Parse()
+
+	//Dereference variables that will be passed into loop, supposedly cheaper to pass by value
+	//http://goinbigdata.com/golang-pass-by-pointer-vs-pass-by-value/
+	//https://stackoverflow.com/questions/24452323/go-performance-whats-the-difference-between-pointer-and-value-in-struct
+	emptyField := *emptyFieldOpt
+	fieldDelimiter := *fieldDelimiterOpt
+	retainInfo := *retainInfoOpt
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -148,9 +156,9 @@ func main() {
 
 			wg.Add(1)
 			if strings.Contains(record[4], ",") {
-				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, c, wg)
+				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
 			} else {
-				go processLine(record, header, lastIndex, emptyField, fieldDelimiter, c, wg)
+				go processLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
 			}
 		}
 
@@ -186,8 +194,8 @@ func lineIsValid(alt string) bool {
 	return true
 }
 
-func processMultiLine(record []string, header []string, lastIndex int, emptyField *string,
-	fieldDelimiter *string, results chan<- string, wg *sync.WaitGroup) {
+func processMultiLine(record []string, header []string, lastIndex int, emptyField string,
+	fieldDelimiter string, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -256,17 +264,27 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 		output.WriteString("\t")
 
 		if len(hets) == 0 {
-			output.WriteString(*emptyField)
+			output.WriteString(emptyField)
 		} else {
-			output.WriteString(strings.Join(hets, *fieldDelimiter))
+			output.WriteString(strings.Join(hets, fieldDelimiter))
 		}
 
 		output.WriteString("\t")
 
 		if len(homs) == 0 {
-			output.WriteString(*emptyField)
+			output.WriteString(emptyField)
 		} else {
-			output.WriteString(strings.Join(homs, *fieldDelimiter))
+			output.WriteString(strings.Join(homs, fieldDelimiter))
+		}
+
+		if retainInfo == true {
+			// Write the index of the allele, to allow users to segregate data in the INFO field
+			output.WriteString("\t")
+			output.WriteString(strconv.Itoa(idx))
+			output.WriteString("\t")
+			// INFO index is 7
+			output.WriteString(record[7])
+			output.WriteString("\t")
 		}
 
 		output.WriteString("\n")
@@ -276,7 +294,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 }
 
 func processLine(record []string, header []string, lastIndex int,
-	emptyField *string, fieldDelimiter *string, results chan<- string, wg *sync.WaitGroup) {
+	emptyField string, fieldDelimiter string, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	if lineIsValid(record[4]) == false {
@@ -333,17 +351,28 @@ func processLine(record []string, header []string, lastIndex int,
 	output.WriteString("\t")
 
 	if len(hets) == 0 {
-		output.WriteString(*emptyField)
+		output.WriteString(emptyField)
 	} else {
-		output.WriteString(strings.Join(hets, *fieldDelimiter))
+		output.WriteString(strings.Join(hets, fieldDelimiter))
 	}
 
 	output.WriteString("\t")
 
 	if len(homs) == 0 {
-		output.WriteString(*emptyField)
+		output.WriteString(emptyField)
 	} else {
-		output.WriteString(strings.Join(homs, *fieldDelimiter))
+		output.WriteString(strings.Join(homs, fieldDelimiter))
+	}
+
+	if retainInfo == true {
+		// Write the index of the allele, to allow users to segregate data in the INFO field
+		// Of course in singl allele case, index is 0 (index is relative to alt alleles, not ref + alt)
+		output.WriteString("\t")
+		output.WriteString("0")
+		output.WriteString("\t")
+		// INFO index is 7
+		output.WriteString(record[7])
+		output.WriteString("\t")
 	}
 
 	output.WriteString("\n")
