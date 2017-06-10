@@ -129,19 +129,33 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	}
 }
 
-func TestLineIsValid(t *testing.T) {
+func TestPassesLine(t *testing.T) {
 	expect := true
 
-	actual := lineIsValid("ACTG")
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}
+	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
+	record := []string{"20", "4", ".", "GCG", "G,GCGCG", ".", "PASS", "DP=100"}
 
-	if expect != actual {
-		t.Error()
+	actual := linePasses(record, header)
+
+	if actual == expect {
+		t.Log("OK: PASS lines pass")
 	} else {
-		t.Log("Support ACTG-containing alleles")
+		t.Error("NOT OK: PASS lines should pass")
+	}
+
+	record = []string{"20", "4", ".", "GCG", "G,GCGCG", ".", ".", "DP=100"}
+
+	actual = linePasses(record, header)
+
+	if actual == expect {
+		t.Log("OK: lines with missing (.) values under FILTER pass")
+	} else {
+		t.Error("NOT OK: lines with missing (.) values under FILTER pass")
 	}
 
 	expect = false
-	actual = lineIsValid(".")
+	actual = altIsValid(".")
 
 	if expect != actual {
 		t.Error("Can't handle missing Alt alleles")
@@ -150,7 +164,7 @@ func TestLineIsValid(t *testing.T) {
 	}
 
 	expect = false
-	actual = lineIsValid("]13 : 123456]T")
+	actual = altIsValid("]13 : 123456]T")
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
@@ -160,7 +174,7 @@ func TestLineIsValid(t *testing.T) {
 	}
 
 	expect = false
-	actual = lineIsValid("C[2 : 321682[")
+	actual = altIsValid("C[2 : 321682[")
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
@@ -170,7 +184,7 @@ func TestLineIsValid(t *testing.T) {
 	}
 
 	expect = false
-	actual = lineIsValid(".A")
+	actual = altIsValid(".A")
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
@@ -180,7 +194,7 @@ func TestLineIsValid(t *testing.T) {
 	}
 
 	expect = false
-	actual = lineIsValid("G.")
+	actual = altIsValid("G.")
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
@@ -190,7 +204,7 @@ func TestLineIsValid(t *testing.T) {
 	}
 
 	expect = false
-	actual = lineIsValid("<DUP>")
+	actual = altIsValid("<DUP>")
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
@@ -200,13 +214,94 @@ func TestLineIsValid(t *testing.T) {
 	}
 
 	expect = false
-	actual = lineIsValid("A,C")
+	actual = altIsValid("A,C")
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
 		t.Error("Allows multiallelics", actual)
 	} else {
-		t.Log("OK: multiallelics are not supported. lineIsValid() requires multiallelics to be split")
+		t.Log("OK: multiallelics are not supported. altIsValid() requires multiallelics to be split")
+	}
+}
+
+func TestAltIsValid(t *testing.T) {
+	expect := true
+
+	actual := altIsValid("ACTG")
+
+	if expect != actual {
+		t.Error()
+	} else {
+		t.Log("Support ACTG-containing alleles")
+	}
+
+	expect = false
+	actual = altIsValid(".")
+
+	if expect != actual {
+		t.Error("Can't handle missing Alt alleles")
+	} else {
+		t.Log("OK: Handles missing Alt alleles")
+	}
+
+	expect = false
+	actual = altIsValid("]13 : 123456]T")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend ']13 : 123456]T'")
+	}
+
+	expect = false
+	actual = altIsValid("C[2 : 321682[")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend 'C[2 : 321682['")
+	}
+
+	expect = false
+	actual = altIsValid(".A")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend '.A'")
+	}
+
+	expect = false
+	actual = altIsValid("G.")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle single breakends")
+	} else {
+		t.Log("OK: Handles single breakend 'G.'")
+	}
+
+	expect = false
+	actual = altIsValid("<DUP>")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Can't handle complex tags")
+	} else {
+		t.Log("OK: Handles complex Alt tags '<DUP>'")
+	}
+
+	expect = false
+	actual = altIsValid("A,C")
+
+	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
+	if expect != actual {
+		t.Error("Allows multiallelics", actual)
+	} else {
+		t.Log("OK: multiallelics are not supported. altIsValid() requires multiallelics to be split")
 	}
 }
 
@@ -405,7 +500,6 @@ func TestOutputsInfo(t *testing.T) {
 	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}
 	record := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT"}
 
-	lastIndex := 7
 	emptyField := "!"
 	fieldDelimiter := ";"
 	retainInfo := true;
@@ -414,21 +508,20 @@ func TestOutputsInfo(t *testing.T) {
 	// I think we need a wait group, not sure.
 	wg := new(sync.WaitGroup)
 
-	
 	go func(){
 		wg.Add(1)
-		processLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
+		processSingleLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
 		wg.Wait();
 		close(c)
 	}()
 
   for row := range c {
-  	record := strings.Split(row[:len(row)-1], "\t")
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
 
-		if record[7] == "0" && record[8] == "AC=1" {
+		if resultRow[7] == "0" && resultRow[8] == "AC=1" {
 			t.Log("OK, add INFO field correctly for single field")
 		} else {
-			t.Error("Couldn't add INFO field")
+			t.Error("Couldn't add INFO field", resultRow)
 		}
 	}
 
@@ -438,7 +531,7 @@ func TestOutputsInfo(t *testing.T) {
 
 	go func(){
 		wg.Add(1)
-		processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
+		processMultiLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
 		wg.Wait();
 		close(c)
 	}()
@@ -447,22 +540,102 @@ func TestOutputsInfo(t *testing.T) {
   for row := range c {
   	index++
 
-  	record := strings.Split(row[:len(row)-1], "\t")
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
 
-  	altIdx, err := strconv.Atoi(record[7])
+  	altIdx, err := strconv.Atoi(resultRow[7])
 
   	if err != nil {
   		t.Error("The 8th column should be numeric")
   	}
 
-  	if altIdx == index && record[8] == "AC=1" {
+  	if altIdx == index && resultRow[8] == "AC=1" {
 			t.Log("OK, add INFO field correctly for multiple field, index", altIdx)
 		} else {
-			t.Error("Couldn't add INFO field")
+			t.Error("Couldn't add INFO field", altIdx, record[8])
 		}
 	}
 
 	if index != 1 {
 		t.Error("Expected to parse 2 alleles, parsed only 1")
+	}
+}
+
+func TestOutputMultiallelic(t *testing.T) {
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}
+	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
+	//Except use A as last base, to properly distinguish first and last base of reference
+	record := []string{"20", "4", ".", "GCA", "G,GCACG", ".", "PASS", "DP=100"}
+
+	emptyField := "!"
+	fieldDelimiter := ";"
+
+	c := make(chan string)
+	// I think we need a wait group, not sure.
+	wg := new(sync.WaitGroup)
+
+	go func(){
+		if linePasses(record, header) == false {
+			t.Error("Line should pass", record, header)
+		}
+
+		wg.Add(1)
+		go processLine(record, header, emptyField, fieldDelimiter, false, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+	index := -1;
+  for row := range c {
+  	index++
+
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if index == 0 {
+  		if resultRow[altIdx] == "-2" {
+  			t.Log("OK, 2 base deletion recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK, 2 base deletion not recapitulated", resultRow)
+  		}
+			
+			if resultRow[posIdx] == "5" {
+				t.Log("OK, 2 base deletion should be shifted by the length of the deleted allele", resultRow)
+			} else {
+				// This means by len(G) in this case
+				t.Error("NOT OK: 2 base deletion should be shifted by the length of the deleted allele", resultRow)
+			}
+
+			if resultRow[refIdx] == "C" {
+				t.Log("OK: In deletion, reference base is the first deleted base", resultRow)
+			} else {
+				t.Error("NOT OK: In deletion, reference base is the first deleted base", resultRow)
+			}
+		}
+
+		if index == 1 {
+  		if resultRow[altIdx] == "+CG" {
+  			t.Log("OK: 2 base deletion recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
+  		}
+			
+			if resultRow[posIdx] == "6" {
+				t.Log("OK: Insertion shuold be shifted by padded base to last reference base", resultRow)
+			} else {
+				// This means by len(G) in this case
+				t.Error("NOT OK: Insertion shuold be shifted by padded base to last reference base", resultRow)
+			}
+
+			if resultRow[refIdx] == "A" {
+				t.Log("OK: In insertion, reference base should be last reference in REF string", resultRow)
+			} else {
+				t.Error("NOT OK: In insertion, reference base should be last reference in REF string", resultRow)
+			}
+		}
+	}
+
+	if index == 1 {
+		t.Log("OK: parsed 2 alleles")
+	} else {
+		t.Error("Expected to parse 2 alleles")
 	}
 }

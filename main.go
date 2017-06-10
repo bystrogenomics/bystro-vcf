@@ -25,6 +25,16 @@ import (
 	// "errors"
 )
 
+const chromIdx int = 0
+const posIdx int = 1
+const idIdx int = 2
+const refIdx int = 3
+const altIdx int = 4
+const qualIdx int = 5
+const filterIdx int = 6
+const infoIdx int = 7
+const formatIdx int = 8
+
 // NOTE: For now this only supports \n end of line characters
 // If we want to support CLRF or whatever, use either csv package, or set a different delimiter
 func main() {
@@ -38,6 +48,7 @@ func main() {
 	cpuprofile := flag.String("cpuProfile", "", "write cpu profile to file")
 	flag.Parse()
 
+	log.SetFlags(0)
 	//Dereference variables that will be passed into loop, supposedly cheaper to pass by value
 	//http://goinbigdata.com/golang-pass-by-pointer-vs-pass-by-value/
 	//https://stackoverflow.com/questions/24452323/go-performance-whats-the-difference-between-pointer-and-value-in-struct
@@ -87,8 +98,6 @@ func main() {
 	//Predeclar sampleNames to be a large item
 	var header []string
 
-	var lastIndex int
-
 	c := make(chan string)
 	// I think we need a wait group, not sure.
 	wg := new(sync.WaitGroup)
@@ -111,14 +120,7 @@ func main() {
 		record := strings.Split(row[:len(row)-1], "\t")
 
 		if foundHeader == false {
-			if record[0] == "#CHROM" {
-
-				lastIndex = len(record) - 1
-
-				//if lastIndex < 9 {
-				//	log.Fatal("Expected to find at least 1 sample, 0 found")
-				//}
-
+			if record[chromIdx] == "#CHROM" {
 				header = record
 
 				foundHeader = true
@@ -134,7 +136,6 @@ func main() {
 	// hetsMulti := make([]string, 0, lastIndx-8)
 	normalizeSampleNames(header)
 
-	log.Printf("Found %d lines in the header", len(header))
 	go func() {
 		for {
 			row, err := reader.ReadString('\n') // 0x0A separator = newline
@@ -149,17 +150,12 @@ func main() {
 			// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
 			record := strings.Split(row[:len(row)-1], "\t")
 
-			if len(record) < len(header) {
-				log.Println("Truncated line. Skipping: ", record[0], record[1])
+			if linePasses(record, header) == false {
 				continue
 			}
 
 			wg.Add(1)
-			if strings.Contains(record[4], ",") {
-				go processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
-			} else {
-				go processLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
-			}
+			go processLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
 		}
 
 		wg.Wait()
@@ -173,7 +169,23 @@ func main() {
 	}
 }
 
-func lineIsValid(alt string) bool {
+func chrToUCSC(chr string) string {
+	if len(chr) < 4 || chr[0:2] != "ch" {
+		var buff bytes.Buffer
+		buff.WriteString("chr")
+		buff.WriteString(chr)
+
+		return buff.String()
+	}
+
+	return chr
+}
+
+func linePasses(record []string, header []string) bool {
+	return len(record) == len(header) && (record[filterIdx] == "." || record[filterIdx] == "PASS")
+}
+
+func altIsValid(alt string) bool {
 	if len(alt) == 1 {
 		if alt != "A" && alt != "C" && alt != "T" && alt != "G" {
 			return false
@@ -194,37 +206,40 @@ func lineIsValid(alt string) bool {
 	return true
 }
 
-func processMultiLine(record []string, header []string, lastIndex int, emptyField string,
+// Without this (calling each separately) real real	1m0.753s, with:	1m0.478s
+func processLine(record []string, header []string, emptyField string,
+	fieldDelimiter string, retainInfo bool, c chan<- string, wg *sync.WaitGroup) {
+
+	if strings.Contains(record[altIdx], ",") {
+		processMultiLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
+	} else {
+		processSingleLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
+	}
+}
+
+func processMultiLine(record []string, header []string, emptyField string,
 	fieldDelimiter string, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	var chr string
-
-	if len(record[0]) < 4 || record[0][0:2] != "ch" {
-		var buff bytes.Buffer
-		buff.WriteString("chr")
-		buff.WriteString(record[0])
-
-		chr = buff.String()
-	}
+	chr := chrToUCSC(record[chromIdx])
 
 	var homs []string
 	var hets []string
-	for idx, allele := range strings.Split(record[4], ",") {
-		if lineIsValid(allele) == false {
-			log.Printf("Non-ACTG Alt #%d, skipping: %s %s", idx+1, record[0], record[1])
+	for idx, allele := range strings.Split(record[altIdx], ",") {
+		if altIsValid(allele) == false {
+			log.Printf("%s:%s Skip ALT #%d (not ACTG)", record[chromIdx], record[posIdx], idx+1)
 			continue
 		}
 
-		siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], allele, record[1])
+		siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx])
 
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		if pos == "" {
-			log.Printf("Invalid Alt #%d, skipping: %s %s", idx+1, record[0], record[1])
+			log.Printf("%s:%s Skip ALT #%d (complex)", record[chromIdx], record[posIdx], idx+1)
 			continue
 		}
 
@@ -246,12 +261,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 
 		var output bytes.Buffer
 
-		if chr != "" {
-			output.WriteString(chr)
-		} else {
-			output.WriteString(record[0])
-		}
-
+		output.WriteString(chr)
 		output.WriteString("\t")
 		output.WriteString(pos)
 		output.WriteString("\t")
@@ -283,7 +293,7 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 			output.WriteString(strconv.Itoa(idx))
 			output.WriteString("\t")
 			// INFO index is 7
-			output.WriteString(record[7])
+			output.WriteString(record[infoIdx])
 			output.WriteString("\t")
 		}
 
@@ -293,34 +303,26 @@ func processMultiLine(record []string, header []string, lastIndex int, emptyFiel
 	}
 }
 
-func processLine(record []string, header []string, lastIndex int,
+func processSingleLine(record []string, header []string,
 	emptyField string, fieldDelimiter string, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	if lineIsValid(record[4]) == false {
-		log.Println("Non-ACTG Alt, skipping: ", record[0], record[1])
+	if altIsValid(record[altIdx]) == false {
+		log.Printf("%s:%s Skip ALT (not ACTG)", record[chromIdx], record[posIdx])
 		return
 	}
 
 	var homs []string
 	var hets []string
 
-	var output bytes.Buffer
-
-	if len(record[0]) < 4 || record[0][0:2] != "ch" {
-		output.WriteString("chr")
-		output.WriteString(record[0])
-		output.WriteString("\t")
-	}
-
-	siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], record[4], record[1])
+	siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], record[altIdx], record[posIdx])
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if pos == "" {
-		log.Println("Invalid Alt, skipping: ", record[0], record[1])
+		log.Printf("%s:%s Skip ALT (complex)", record[chromIdx], record[posIdx])
 		return
 	}
 
@@ -337,6 +339,10 @@ func processLine(record []string, header []string, lastIndex int,
 		}
 	}
 
+	var output bytes.Buffer
+
+	output.WriteString(chrToUCSC(record[chromIdx]))
+	output.WriteString("\t")
 	output.WriteString(pos)
 	output.WriteString("\t")
 	output.WriteString(siteType)
@@ -368,7 +374,7 @@ func processLine(record []string, header []string, lastIndex int,
 		output.WriteString("0")
 		output.WriteString("\t")
 		// INFO index is 7
-		output.WriteString(record[7])
+		output.WriteString(record[infoIdx])
 		output.WriteString("\t")
 	}
 
@@ -485,7 +491,7 @@ func updateFieldsWithAlt(ref string, alt string, pos string) (string, string, st
 }
 
 func makeHetHomozygotes(fields []string, header []string, homsArr *[]string, hetsArr *[]string, alleleIdx string) error {
-	simpleGT := fields[8] == "GT"
+	simpleGT := fields[formatIdx] == "GT"
 
 	gt := make([]string, 0, 2)
 	gtCount := 0
