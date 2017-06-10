@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+	"sync"
+	"strconv"
 )
 
 func TestUpdateFieldsWithAlt(t *testing.T) {
@@ -396,5 +398,71 @@ func TestNomralizeSampleNames(t *testing.T) {
 		t.Log("OK,  didn't mess up name without a period", header[12])
 	} else {
 		t.Error("Failed: Messed up name S-4", header[12])
+	}
+}
+
+func TestOutputsInfo(t *testing.T) {
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}
+	record := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT"}
+
+	lastIndex := 7
+	emptyField := "!"
+	fieldDelimiter := ";"
+	retainInfo := true;
+
+	c := make(chan string)
+	// I think we need a wait group, not sure.
+	wg := new(sync.WaitGroup)
+
+	
+	go func(){
+		wg.Add(1)
+		processLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+  for row := range c {
+  	record := strings.Split(row[:len(row)-1], "\t")
+
+		if record[7] == "0" && record[8] == "AC=1" {
+			t.Log("OK, add INFO field correctly for single field")
+		} else {
+			t.Error("Couldn't add INFO field")
+		}
+	}
+
+	record = []string{"10", "1000", "rs#", "C", "T,G", "100", "PASS", "AC=1", "GT"}
+
+	c = make(chan string)
+
+	go func(){
+		wg.Add(1)
+		processMultiLine(record, header, lastIndex, emptyField, fieldDelimiter, retainInfo, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+	index := -1;
+  for row := range c {
+  	index++
+
+  	record := strings.Split(row[:len(row)-1], "\t")
+
+  	altIdx, err := strconv.Atoi(record[7])
+
+  	if err != nil {
+  		t.Error("The 8th column should be numeric")
+  	}
+
+  	if altIdx == index && record[8] == "AC=1" {
+			t.Log("OK, add INFO field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("Couldn't add INFO field")
+		}
+	}
+
+	if index != 1 {
+		t.Error("Expected to parse 2 alleles, parsed only 1")
 	}
 }
