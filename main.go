@@ -293,7 +293,10 @@ func processLine(record []string, header []string, lastIndex int,
 		output.WriteString("chr")
 		output.WriteString(record[0])
 		output.WriteString("\t")
-	}
+	} else {
+           output.WriteString(record[0])
+           output.WriteString("\t")
+        }
 
 	siteType, pos, ref, alt, err := updateFieldsWithAlt(record[3], record[4], record[1])
 
