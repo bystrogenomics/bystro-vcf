@@ -42,7 +42,7 @@ func main() {
 	errPath := flag.String("errPath", "", "The output path for the JSON output (optional)")
 	emptyFieldOpt := flag.String("emptyField", "!", "The output path for the JSON output (optional)")
 	fieldDelimiterOpt := flag.String("fieldDelimiter", ";", "The output path for the JSON output (optional)")
-	retainIdOpt := flag.Bool("retainID", false, "Retain the ID field in the output (1 additional output field, before the reatinInfo output fields, should those be present")
+	retainIdOpt := flag.Bool("retainId", false, "Retain the ID field in the output (1 additional output field, before the reatinInfo output fields, should those be present")
 	retainInfoOpt := flag.Bool("retainInfo", false, "Should we retain INFO field data (if so, will output 2 additional fields, the index of the allele (to handle multiallelic segregation of INFO data properly), and the INFO field")
 	// chrPrefix := flag.Bool("ucscChr", "", "Whether or not to use UCSC style chromosome designations, i.e chrX")
 
@@ -386,7 +386,6 @@ func processSingleLine(record []string, header []string,
 		output.WriteString("\t")
 		// INFO index is 7
 		output.WriteString(record[infoIdx])
-		output.WriteString("\t")
 	}
 
 	output.WriteString("\n")
