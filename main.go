@@ -42,6 +42,7 @@ func main() {
 	errPath := flag.String("errPath", "", "The output path for the JSON output (optional)")
 	emptyFieldOpt := flag.String("emptyField", "!", "The output path for the JSON output (optional)")
 	fieldDelimiterOpt := flag.String("fieldDelimiter", ";", "The output path for the JSON output (optional)")
+	retainIdOpt := flag.Bool("retainID", false, "Retain the ID field in the output (1 additional output field, before the reatinInfo output fields, should those be present")
 	retainInfoOpt := flag.Bool("retainInfo", false, "Should we retain INFO field data (if so, will output 2 additional fields, the index of the allele (to handle multiallelic segregation of INFO data properly), and the INFO field")
 	// chrPrefix := flag.Bool("ucscChr", "", "Whether or not to use UCSC style chromosome designations, i.e chrX")
 
@@ -55,6 +56,7 @@ func main() {
 	emptyField := *emptyFieldOpt
 	fieldDelimiter := *fieldDelimiterOpt
 	retainInfo := *retainInfoOpt
+	retainId := *retainIdOpt
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -155,7 +157,7 @@ func main() {
 			}
 
 			wg.Add(1)
-			go processLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
+			go processLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
 		}
 
 		wg.Wait()
@@ -208,17 +210,17 @@ func altIsValid(alt string) bool {
 
 // Without this (calling each separately) real real	1m0.753s, with:	1m0.478s
 func processLine(record []string, header []string, emptyField string,
-	fieldDelimiter string, retainInfo bool, c chan<- string, wg *sync.WaitGroup) {
+	fieldDelimiter string, retainId bool, retainInfo bool, c chan<- string, wg *sync.WaitGroup) {
 
 	if strings.Contains(record[altIdx], ",") {
-		processMultiLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
+		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
 	} else {
-		processSingleLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
+		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
 	}
 }
 
 func processMultiLine(record []string, header []string, emptyField string,
-	fieldDelimiter string, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
+	fieldDelimiter string, retainId bool, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -287,6 +289,11 @@ func processMultiLine(record []string, header []string, emptyField string,
 			output.WriteString(strings.Join(homs, fieldDelimiter))
 		}
 
+		if retainId == true {
+			output.WriteString("\t")
+			output.WriteString(record[idIdx])
+		}
+
 		if retainInfo == true {
 			// Write the index of the allele, to allow users to segregate data in the INFO field
 			output.WriteString("\t")
@@ -294,7 +301,6 @@ func processMultiLine(record []string, header []string, emptyField string,
 			output.WriteString("\t")
 			// INFO index is 7
 			output.WriteString(record[infoIdx])
-			output.WriteString("\t")
 		}
 
 		output.WriteString("\n")
@@ -304,7 +310,7 @@ func processMultiLine(record []string, header []string, emptyField string,
 }
 
 func processSingleLine(record []string, header []string,
-	emptyField string, fieldDelimiter string, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
+	emptyField string, fieldDelimiter string, retainId bool, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	if altIsValid(record[altIdx]) == false {
@@ -365,6 +371,11 @@ func processSingleLine(record []string, header []string,
 		output.WriteString(emptyField)
 	} else {
 		output.WriteString(strings.Join(homs, fieldDelimiter))
+	}
+
+	if retainId == true {
+		output.WriteString("\t")
+		output.WriteString(record[idIdx])
 	}
 
 	if retainInfo == true {

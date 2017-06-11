@@ -13,7 +13,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err := updateFieldsWithAlt("T", "C", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed")
+		t.Error("NOT OK: Test failed")
 	} else {
 		t.Log("OK: SNP")
 	}
@@ -23,7 +23,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "TCCA", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: SNPs that are longer than 1 base are suported when SNP at end")
 	}
@@ -33,7 +33,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "TGAT", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: SNPs that are longer than 1 base are suported when SNP in middle")
 	}
@@ -43,7 +43,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "AGCT", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: SNPs that are longer than 1 base are suported when SNP at beginning")
 	}
@@ -53,7 +53,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "GTAA", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: MNPs are not supported")
 	}
@@ -63,7 +63,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TC", "T", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: 1-based deletions ")
 	}
@@ -73,7 +73,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCGT", "T", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: Deletions with references longer than 2 bases")
 	}
@@ -83,7 +83,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TA", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: Deletions longer than 1 base")
 	}
@@ -93,7 +93,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TAC", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: Left edge of deletion must match exactly")
 	}
@@ -103,7 +103,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("T", "TAGCTT", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: Insertions where reference is 1 base long")
 	}
@@ -113,7 +113,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TA", "TAGCTT", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: Insertions where reference is 2 bases long")
 	}
@@ -123,7 +123,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	sType, pos, ref, alt, err = updateFieldsWithAlt("TT", "TAGCTT", "100")
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("Test failed", sType, pos, ref, alt)
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
 		t.Log("OK: Insertions where reference and alt don't share a left edge are skipped")
 	}
@@ -158,7 +158,7 @@ func TestPassesLine(t *testing.T) {
 	actual = altIsValid(".")
 
 	if expect != actual {
-		t.Error("Can't handle missing Alt alleles")
+		t.Error("NOT OK: Can't handle missing Alt alleles")
 	} else {
 		t.Log("OK: Handles missing Alt alleles")
 	}
@@ -168,7 +168,7 @@ func TestPassesLine(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend ']13 : 123456]T'")
 	}
@@ -178,7 +178,7 @@ func TestPassesLine(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend 'C[2 : 321682['")
 	}
@@ -188,7 +188,7 @@ func TestPassesLine(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend '.A'")
 	}
@@ -198,7 +198,7 @@ func TestPassesLine(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend 'G.'")
 	}
@@ -208,7 +208,7 @@ func TestPassesLine(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle complex tags")
+		t.Error("NOT OK: Can't handle complex tags")
 	} else {
 		t.Log("OK: Handles complex Alt tags '<DUP>'")
 	}
@@ -218,7 +218,7 @@ func TestPassesLine(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Allows multiallelics", actual)
+		t.Error("NOT OK: Allows multiallelics", actual)
 	} else {
 		t.Log("OK: multiallelics are not supported. altIsValid() requires multiallelics to be split")
 	}
@@ -232,14 +232,14 @@ func TestAltIsValid(t *testing.T) {
 	if expect != actual {
 		t.Error()
 	} else {
-		t.Log("Support ACTG-containing alleles")
+		t.Log("NOT OK: Support ACTG-containing alleles")
 	}
 
 	expect = false
 	actual = altIsValid(".")
 
 	if expect != actual {
-		t.Error("Can't handle missing Alt alleles")
+		t.Error("NOT OK: Can't handle missing Alt alleles")
 	} else {
 		t.Log("OK: Handles missing Alt alleles")
 	}
@@ -249,7 +249,7 @@ func TestAltIsValid(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend ']13 : 123456]T'")
 	}
@@ -259,7 +259,7 @@ func TestAltIsValid(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend 'C[2 : 321682['")
 	}
@@ -269,7 +269,7 @@ func TestAltIsValid(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend '.A'")
 	}
@@ -279,7 +279,7 @@ func TestAltIsValid(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle single breakends")
+		t.Error("NOT OK: Can't handle single breakends")
 	} else {
 		t.Log("OK: Handles single breakend 'G.'")
 	}
@@ -289,7 +289,7 @@ func TestAltIsValid(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Can't handle complex tags")
+		t.Error("NOT OK: Can't handle complex tags")
 	} else {
 		t.Log("OK: Handles complex Alt tags '<DUP>'")
 	}
@@ -299,7 +299,7 @@ func TestAltIsValid(t *testing.T) {
 
 	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
 	if expect != actual {
-		t.Error("Allows multiallelics", actual)
+		t.Error("NOT OK: Should require single alleles in altIsValid", actual)
 	} else {
 		t.Log("OK: multiallelics are not supported. altIsValid() requires multiallelics to be split")
 	}
@@ -324,7 +324,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 0 {
 		t.Log("OK: Homozygous reference samples are skipped")
 	} else {
-		t.Error("0 alleles give unexpected results", actualHoms, actualHets)
+		t.Error("NOT OK: 0 alleles give unexpected results", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGT, "0|1", "0|1", "0|1", "0|1")
@@ -337,7 +337,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 4 {
 		t.Log("OK: handles hets")
 	} else {
-		t.Error("0 alleles give unexpected results", actualHoms, actualHets)
+		t.Error("NOT OK: 0 alleles give unexpected results", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGT, ".|1", "0|1", "0|1", "0|1")
@@ -350,7 +350,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 3 {
 		t.Log("OK: GT's containing missing data are entirely uncertain, therefore skipped")
 	} else {
-		t.Error("Fails to handle missing data", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle missing data", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGT, "1|1", "1|1", "0|1", "0|1")
@@ -363,7 +363,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 2 && len(actualHets) == 2 {
 		t.Log("OK: handles homs and hets")
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
@@ -376,7 +376,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 1 && len(actualHets) == 3 {
 		t.Log("OK: a sample heterozygous for a wanted allele is heterozygous for that allele even if its other allele is unwanted (for multiallelic phasing)")
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
@@ -389,7 +389,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: Het / homozygous status is based purely on the wanted allele, rather than total non-ref count")
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGTcomplex, "1|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
@@ -402,7 +402,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: handles complicated GTs, with non-1 alleles", fields)
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGTcomplex, "1|2|1:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
@@ -415,7 +415,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: Complicated GT: Triploids are considered het if only 1 present desired allele", fields)
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGT, "1|2|1", "1|1", "0|1", "0|1")
@@ -428,7 +428,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: Triploids are considered het if only 1 present desired allele")
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGTcomplex, "2|2|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
@@ -441,7 +441,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
 		t.Log("OK: Complicated GT: Triploids are considered hom only if all alleles present are desired", fields)
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
 	fields = append(sharedFieldsGT, "2|2|2", "1|1", "0|1", "0|1")
@@ -454,7 +454,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
 		t.Log("OK: Triploids are considered hom only if all alleles present are desired")
 	} else {
-		t.Error("Fails to handle homs and hets", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 }
 
@@ -465,34 +465,34 @@ func TestNomralizeSampleNames(t *testing.T) {
 
 	for i := 9; i < len(header); i++ {
 		if strings.Contains(header[i], ".") {
-			t.Error("Failed to replace period")
+			t.Error("NOT OK: Couldn't replace period")
 		} else {
-			t.Log("OK, no periods found in", header[i])
+			t.Log("OK: no periods found in", header[i])
 		}
 	}
 
 	if header[9] == "S1_HAHAHAH" {
-		t.Log("OK, replaced period in S1.HAHAHAH", header[9])
+		t.Log("OK: replaced period in S1.HAHAHAH", header[9])
 	} else {
-		t.Error("Failed to replace period in S1.HAHAHAH", header[9])
+		t.Error("NOT OK: Couldn't replace period in S1.HAHAHAH", header[9])
 	}
 
 	if header[10] == "S2_TRYINGTO_MESSYOUUP" {
-		t.Log("OK, replaced two periods in S2.TRYINGTO.MESSYOUUP", header[10])
+		t.Log("OK: replaced two periods in S2.TRYINGTO.MESSYOUUP", header[10])
 	} else {
-		t.Error("Failed to replace periods in S2.TRYINGTO.MESSYOUUP", header[10])
+		t.Error("NOT OK: Couldn't replace periods in S2.TRYINGTO.MESSYOUUP", header[10])
 	}
 
 	if header[11] == "S3" {
-		t.Log("OK, didn't mess up name S3", header[11])
+		t.Log("OK: didn't mess up name S3", header[11])
 	} else {
-		t.Error("Failed: Messed up name S3", header[11])
+		t.Error("NOT OK: Messed up name S3", header[11])
 	}
 
 	if header[12] == "S-4" {
-		t.Log("OK,  didn't mess up name without a period", header[12])
+		t.Log("OK:  didn't mess up name without a period", header[12])
 	} else {
-		t.Error("Failed: Messed up name S-4", header[12])
+		t.Error("NOT OK: Messed up name S-4", header[12])
 	}
 }
 
@@ -502,6 +502,7 @@ func TestOutputsInfo(t *testing.T) {
 
 	emptyField := "!"
 	fieldDelimiter := ";"
+	retainId := false;
 	retainInfo := true;
 
 	c := make(chan string)
@@ -510,7 +511,7 @@ func TestOutputsInfo(t *testing.T) {
 
 	go func(){
 		wg.Add(1)
-		processSingleLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
+		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
 		wg.Wait();
 		close(c)
 	}()
@@ -518,10 +519,16 @@ func TestOutputsInfo(t *testing.T) {
   for row := range c {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
+  	if len(resultRow) == 9 {
+  		t.Log("OK: With retainInfo flag set, but not retainID, should output 8 fields")
+  	} else {
+  		t.Error("NOT OK: With retainInfo flag set, but not retainID, should output 8 fields")
+  	}
+  	
 		if resultRow[7] == "0" && resultRow[8] == "AC=1" {
-			t.Log("OK, add INFO field correctly for single field")
+			t.Log("OK: add INFO field correctly for single field")
 		} else {
-			t.Error("Couldn't add INFO field", resultRow)
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
 		}
 	}
 
@@ -531,7 +538,7 @@ func TestOutputsInfo(t *testing.T) {
 
 	go func(){
 		wg.Add(1)
-		processMultiLine(record, header, emptyField, fieldDelimiter, retainInfo, c, wg)
+		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
 		wg.Wait();
 		close(c)
 	}()
@@ -542,21 +549,193 @@ func TestOutputsInfo(t *testing.T) {
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
+  	if len(resultRow) == 9 {
+  		t.Log("OK: With retainInfo flag set, but not retainID, should output 8 fields")
+  	} else {
+  		t.Error("NOT OK: With retainInfo flag set, but not retainID, should output 8 fields")
+  	}
+
   	altIdx, err := strconv.Atoi(resultRow[7])
 
   	if err != nil {
-  		t.Error("The 8th column should be numeric")
+  		t.Error("NOT OK: The 8th column should be numeric")
   	}
 
   	if altIdx == index && resultRow[8] == "AC=1" {
-			t.Log("OK, add INFO field correctly for multiple field, index", altIdx)
+			t.Log("OK: add INFO field correctly for multiple field, index", altIdx)
 		} else {
-			t.Error("Couldn't add INFO field", altIdx, record[8])
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
 		}
 	}
 
 	if index != 1 {
-		t.Error("Expected to parse 2 alleles, parsed only 1")
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+}
+
+func TestOutputsId(t *testing.T) {
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}
+	record := []string{"10", "1000", "rs123", "C", "T", "100", "PASS", "AC=1", "GT"}
+
+	emptyField := "!"
+	fieldDelimiter := ";"
+	retainId := true;
+	retainInfo := false;
+
+	c := make(chan string)
+	// I think we need a wait group, not sure.
+	wg := new(sync.WaitGroup)
+
+	go func(){
+		wg.Add(1)
+		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+  for row := range c {
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if len(resultRow) == 8 {
+  		t.Log("OK: With retainID flag set, but not retainInfo, should output 8 fields")
+  	} else {
+  		t.Error("NOT OK: With retainID flag set, but not retainInfo, should output 8 fields")
+  	}
+
+		if resultRow[7] == "rs123" {
+			t.Log("OK: add ID field correctly for single field")
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", resultRow)
+		}
+	}
+
+	record = []string{"10", "1000", "rs456", "C", "T,G", "100", "PASS", "AC=1", "GT"}
+
+	c = make(chan string)
+
+	go func(){
+		wg.Add(1)
+		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+	index := -1
+  for row := range c {
+  	index++
+
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if len(resultRow) == 8 {
+  		t.Log("OK: With retainID flag set, but not retainInfo, should output 8 fields")
+  	} else {
+  		t.Error("NOT OK: With retainID flag set, but not retainInfo, should output 8 fields")
+  	}
+
+  	if resultRow[7] == "rs456" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", resultRow)
+		}
+	}
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+}
+
+func TestOutputsIdAndInfo(t *testing.T) {
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}
+	record := []string{"10", "1000", "rs123", "C", "T", "100", "PASS", "AC=1", "GT"}
+
+	emptyField := "!"
+	fieldDelimiter := ";"
+	retainId := true;
+	retainInfo := true;
+
+	c := make(chan string)
+	// I think we need a wait group, not sure.
+	wg := new(sync.WaitGroup)
+
+	go func(){
+		wg.Add(1)
+		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+  for row := range c {
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+  	
+  	if len(resultRow) == 10 {
+  		t.Log("OK: With both retainID and ratinInfo flags set, should output 10 fields")
+  	} else {
+  		t.Error("NOT OK: With both retainID and ratinInfo flags set, should output 10 fields")
+  	}
+
+		if resultRow[7] == "rs123" {
+			t.Log("OK: add ID field correctly for single field")
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", resultRow)
+		}
+
+		if resultRow[8] == "0" && resultRow[9] == "AC=1" {
+			t.Log("OK: add INFO field correctly for single field")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+	}
+
+	record = []string{"10", "1000", "rs456", "C", "T,G", "100", "PASS", "AC=1", "GT"}
+
+	c = make(chan string)
+
+	go func(){
+		wg.Add(1)
+		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+	index := -1
+  for row := range c {
+  	index++
+ 
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if len(resultRow) == 10 {
+  		t.Log("OK: With both retainID and ratinInfo flags set, should output 10 fields")
+  	} else {
+  		t.Error("With both retainID and ratinInfo flags set, should output 10 fields")
+  	}
+
+  	if resultRow[7] == "rs456" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", altIdx, record[8])
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[8])
+
+  	if err != nil {
+  		t.Error("NOT OK: The 9th column should be numeric")
+  	}
+
+  	if altIdx == index {
+  		t.Log("OK: Multiallelic index is in 9th column when retainInfo is true")
+		} else {
+			t.Error("NOT OK: Multiallelic index isn't in 9th column when retainInfo is true", resultRow)
+		}
+
+		if resultRow[9] == "AC=1" {
+			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+	}
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
 	}
 }
 
@@ -575,11 +754,11 @@ func TestOutputMultiallelic(t *testing.T) {
 
 	go func(){
 		if linePasses(record, header) == false {
-			t.Error("Line should pass", record, header)
+			t.Error("NOT OK: Line should pass", record, header)
 		}
 
 		wg.Add(1)
-		go processLine(record, header, emptyField, fieldDelimiter, false, c, wg)
+		go processLine(record, header, emptyField, fieldDelimiter, false, false, c, wg)
 		wg.Wait();
 		close(c)
 	}()
@@ -592,13 +771,13 @@ func TestOutputMultiallelic(t *testing.T) {
 
   	if index == 0 {
   		if resultRow[altIdx] == "-2" {
-  			t.Log("OK, 2 base deletion recapitulated", resultRow)
+  			t.Log("OK: 2 base deletion recapitulated", resultRow)
   		} else {
-  			t.Error("NOT OK, 2 base deletion not recapitulated", resultRow)
+  			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
   		}
 			
 			if resultRow[posIdx] == "5" {
-				t.Log("OK, 2 base deletion should be shifted by the length of the deleted allele", resultRow)
+				t.Log("OK: 2 base deletion should be shifted by the length of the deleted allele", resultRow)
 			} else {
 				// This means by len(G) in this case
 				t.Error("NOT OK: 2 base deletion should be shifted by the length of the deleted allele", resultRow)
@@ -619,10 +798,10 @@ func TestOutputMultiallelic(t *testing.T) {
   		}
 			
 			if resultRow[posIdx] == "6" {
-				t.Log("OK: Insertion shuold be shifted by padded base to last reference base", resultRow)
+				t.Log("OK: Insertion should be shifted by padded base to last reference base", resultRow)
 			} else {
 				// This means by len(G) in this case
-				t.Error("NOT OK: Insertion shuold be shifted by padded base to last reference base", resultRow)
+				t.Error("NOT OK: Insertion should be shifted by padded base to last reference base", resultRow)
 			}
 
 			if resultRow[refIdx] == "A" {
@@ -636,6 +815,6 @@ func TestOutputMultiallelic(t *testing.T) {
 	if index == 1 {
 		t.Log("OK: parsed 2 alleles")
 	} else {
-		t.Error("Expected to parse 2 alleles")
+		t.Error("NOT OK: Expected to parse 2 alleles")
 	}
 }
