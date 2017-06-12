@@ -4,25 +4,15 @@ package main
 import (
 	"bufio"
 	"bytes"
-	// "encoding/csv"
-	// "encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	// "io/ioutil"
 	"log"
-	// "math"
 	"os"
-	// "sort"
 	"strconv"
 	"strings"
 	"sync"
-
-	// "github.com/davecgh/go-spew/spew"
-	// "math/big"
 	"runtime/pprof"
-	// "sync"
-	// "errors"
 )
 
 const chromIdx int = 0
@@ -35,31 +25,49 @@ const filterIdx int = 6
 const infoIdx int = 7
 const formatIdx int = 8
 
+type Config struct {
+	inPath string
+	errPath string
+	emptyField string
+	fieldDelimiter string
+	keepId bool
+	keepInfo bool
+	cpuProfile string
+}
+
+func setup(args []string) *Config {
+	config := &Config{}
+	flag.StringVar(&config.inPath, "inPath", "", "The input file path (optional: default is stdin)")
+	flag.StringVar(&config.errPath, "errPath", "", "The output path for the JSON output (optional)")
+	flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
+	flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
+	flag.BoolVar(&config.keepId, "keepId", false, "Retain the ID field in output")
+	flag.BoolVar(&config.keepInfo, "keepInfo", false, "Retain INFO field in output (2 appended output fields: allele index and the INFO field. Will appear after id field if --keepId flag set.")
+	flag.StringVar(&config.cpuProfile, "cpuProfile", "", "Write cpu profile to file at this path")
+
+	// allows args to be mocked https://github.com/nwjlyons/email/blob/master/inputs.go
+	// can only run 1 such test, else, redefined flags error
+  a := os.Args[1:]
+  if args != nil {
+    a = args
+  }
+
+  flag.CommandLine.Parse(a)
+
+	return config
+}
+
+func init() {
+	log.SetFlags(0)
+}
+
 // NOTE: For now this only supports \n end of line characters
 // If we want to support CLRF or whatever, use either csv package, or set a different delimiter
 func main() {
-	inputFilePath := flag.String("inPath", "", "The input file path (optional: default is stdin)")
-	errPath := flag.String("errPath", "", "The output path for the JSON output (optional)")
-	emptyFieldOpt := flag.String("emptyField", "!", "The output path for the JSON output (optional)")
-	fieldDelimiterOpt := flag.String("fieldDelimiter", ";", "The output path for the JSON output (optional)")
-	retainIdOpt := flag.Bool("retainId", false, "Retain the ID field in the output (1 additional output field, before the reatinInfo output fields, should those be present")
-	retainInfoOpt := flag.Bool("retainInfo", false, "Should we retain INFO field data (if so, will output 2 additional fields, the index of the allele (to handle multiallelic segregation of INFO data properly), and the INFO field")
-	// chrPrefix := flag.Bool("ucscChr", "", "Whether or not to use UCSC style chromosome designations, i.e chrX")
+	config := setup(nil)
 
-	cpuprofile := flag.String("cpuProfile", "", "write cpu profile to file")
-	flag.Parse()
-
-	log.SetFlags(0)
-	//Dereference variables that will be passed into loop, supposedly cheaper to pass by value
-	//http://goinbigdata.com/golang-pass-by-pointer-vs-pass-by-value/
-	//https://stackoverflow.com/questions/24452323/go-performance-whats-the-difference-between-pointer-and-value-in-struct
-	emptyField := *emptyFieldOpt
-	fieldDelimiter := *fieldDelimiterOpt
-	retainInfo := *retainInfoOpt
-	retainId := *retainIdOpt
-
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
+	if config.cpuProfile != "" {
+		f, err := os.Create(config.cpuProfile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -69,9 +77,9 @@ func main() {
 
 	inFh := (*os.File)(nil)
 
-	if *inputFilePath != "" {
+	if config.inPath != "" {
 		var err error
-		inFh, err = os.Open(*inputFilePath)
+		inFh, err = os.Open(config.inPath)
 
 		if err != nil {
 			log.Fatal(err)
@@ -83,9 +91,9 @@ func main() {
 	// make sure it gets closed
 	defer inFh.Close()
 
-	if *errPath != "" {
+	if config.errPath != "" {
 		var err error
-		os.Stderr, err = os.Open(*errPath)
+		os.Stderr, err = os.Open(config.errPath)
 
 		if err != nil {
 			log.Fatal(err)
@@ -148,8 +156,8 @@ func main() {
 				log.Fatal(err)
 			}
 
-			// // remove the trailing \n
-			// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
+			// remove the trailing \n
+			// equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
 			record := strings.Split(row[:len(row)-1], "\t")
 
 			if linePasses(record, header) == false {
@@ -157,7 +165,7 @@ func main() {
 			}
 
 			wg.Add(1)
-			go processLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
+			go processLine(record, header, config.emptyField, config.fieldDelimiter, config.keepId, config.keepInfo, c, wg)
 		}
 
 		wg.Wait()
@@ -210,17 +218,17 @@ func altIsValid(alt string) bool {
 
 // Without this (calling each separately) real real	1m0.753s, with:	1m0.478s
 func processLine(record []string, header []string, emptyField string,
-	fieldDelimiter string, retainId bool, retainInfo bool, c chan<- string, wg *sync.WaitGroup) {
+	fieldDelimiter string, keepId bool, keepInfo bool, c chan<- string, wg *sync.WaitGroup) {
 
 	if strings.Contains(record[altIdx], ",") {
-		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
+		processMultiLine(record, header, emptyField, fieldDelimiter, keepId, keepInfo, c, wg)
 	} else {
-		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
+		processSingleLine(record, header, emptyField, fieldDelimiter, keepId, keepInfo, c, wg)
 	}
 }
 
 func processMultiLine(record []string, header []string, emptyField string,
-	fieldDelimiter string, retainId bool, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
+	fieldDelimiter string, keepId bool, keepInfo bool, results chan<- string, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -289,12 +297,12 @@ func processMultiLine(record []string, header []string, emptyField string,
 			output.WriteString(strings.Join(homs, fieldDelimiter))
 		}
 
-		if retainId == true {
+		if keepId == true {
 			output.WriteString("\t")
 			output.WriteString(record[idIdx])
 		}
 
-		if retainInfo == true {
+		if keepInfo == true {
 			// Write the index of the allele, to allow users to segregate data in the INFO field
 			output.WriteString("\t")
 			output.WriteString(strconv.Itoa(idx))
@@ -310,7 +318,7 @@ func processMultiLine(record []string, header []string, emptyField string,
 }
 
 func processSingleLine(record []string, header []string,
-	emptyField string, fieldDelimiter string, retainId bool, retainInfo bool, results chan<- string, wg *sync.WaitGroup) {
+	emptyField string, fieldDelimiter string, keepId bool, keepInfo bool, results chan<- string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	if altIsValid(record[altIdx]) == false {
@@ -373,12 +381,12 @@ func processSingleLine(record []string, header []string,
 		output.WriteString(strings.Join(homs, fieldDelimiter))
 	}
 
-	if retainId == true {
+	if keepId == true {
 		output.WriteString("\t")
 		output.WriteString(record[idIdx])
 	}
 
-	if retainInfo == true {
+	if keepInfo == true {
 		// Write the index of the allele, to allow users to segregate data in the INFO field
 		// Of course in singl allele case, index is 0 (index is relative to alt alleles, not ref + alt)
 		output.WriteString("\t")

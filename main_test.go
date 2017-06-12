@@ -7,6 +7,33 @@ import (
 	"strconv"
 )
 
+func TestKeepFlagsTrue(t *testing.T) {
+	args := []string{
+		"--keepInfo",
+		"--keepId",
+		"--inPath", "/path/to/file",
+		"--errPath", "/path/to/err",
+		"--cpuProfile", "/path/to/profile",
+		"--emptyField", ".",
+		"--fieldDelimiter", "&",
+	}
+
+	config := setup(args)
+
+  if config.keepInfo != true || config.keepId != true {
+  	t.Error("NOT OK: parse keepInfo and keepId args")
+  }
+
+  if config.inPath != "/path/to/file" || config.errPath != "/path/to/err" ||
+  config.cpuProfile != "/path/to/profile" {
+  	t.Error("NOT OK: parse inPath and errPath args")
+  }
+
+  if config.emptyField != "." || config.fieldDelimiter != "&" {
+  	t.Error("NOT OK: parse emptyField and fieldDelimiter args")
+  }
+}
+
 func TestUpdateFieldsWithAlt(t *testing.T) {
 	expType, exPos, expRef, expAlt := "SNP", "100", "T", "C"
 
