@@ -204,31 +204,33 @@ func processMultiLine(record []string, header []string, emptyField string,
 	defer wg.Done()
 	var homs []string
 	var hets []string
+	var missing []string
+
 	for idx, allele := range strings.Split(record[altIdx], ",") {
 		if altIsValid(allele) == false {
 			log.Printf("%s:%s Skip ALT #%d (not ACTG)", record[chromIdx], record[posIdx], idx+1)
 			continue
 		}
+
 		siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx], true)
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		if pos == "" {
 			log.Printf("%s:%s Skip ALT #%d (complex)", record[chromIdx], record[posIdx], idx+1)
 			continue
 		}
+
 		// If no sampels are provided, annotate what we can, skipping hets and homs
 		if len(header) > 9 {
-			homs = homs[:0]
-			hets = hets[:0]
-			err = makeHetHomozygotes(record, header, &homs, &hets, strconv.Itoa(idx+1))
-			if err != nil {
-				log.Fatal(err)
-			}
+			homs, hets, missing = makeHetHomozygotes(record, header, strconv.Itoa(idx+1))
+
 			if len(homs) == 0 && len(hets) == 0 {
 				continue
 			}
 		}
+
 		var output bytes.Buffer
 		output.WriteString(record[chromIdx])
 		output.WriteString("\t")
@@ -240,21 +242,34 @@ func processMultiLine(record []string, header []string, emptyField string,
 		output.WriteString("\t")
 		output.WriteString(alt)
 		output.WriteString("\t")
+
 		if len(hets) == 0 {
 			output.WriteString(emptyField)
 		} else {
 			output.WriteString(strings.Join(hets, fieldDelimiter))
 		}
+
 		output.WriteString("\t")
+
 		if len(homs) == 0 {
 			output.WriteString(emptyField)
 		} else {
 			output.WriteString(strings.Join(homs, fieldDelimiter))
 		}
+
+		output.WriteString("\t")
+
+		if len(missing) == 0 {
+			output.WriteString(emptyField)
+		} else {
+			output.WriteString(strings.Join(missing, fieldDelimiter))
+		}
+
 		if keepId == true {
 			output.WriteString("\t")
 			output.WriteString(record[idIdx])
 		}
+
 		if keepInfo == true {
 			// Write the index of the allele, to allow users to segregate data in the INFO field
 			output.WriteString("\t")
@@ -263,10 +278,12 @@ func processMultiLine(record []string, header []string, emptyField string,
 			// INFO index is 7
 			output.WriteString(record[infoIdx])
 		}
+
 		output.WriteString("\n")
 		results <- output.String()
 	}
 }
+
 func processSingleLine(record []string, header []string,
 	emptyField string, fieldDelimiter string, keepId bool, keepInfo bool, results chan<- string, wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -274,26 +291,31 @@ func processSingleLine(record []string, header []string,
 		log.Printf("%s:%s Skip ALT (not ACTG)", record[chromIdx], record[posIdx])
 		return
 	}
+
 	var homs []string
 	var hets []string
+	var missing []string
+
 	siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], record[altIdx], record[posIdx], false)
+
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if pos == "" {
 		log.Printf("%s:%s Skip ALT (complex)", record[chromIdx], record[posIdx])
 		return
 	}
+
 	// If no sampels are provided, annotate what we can, skipping hets and homs
 	if len(header) > 9 {
-		err = makeHetHomozygotes(record, header, &homs, &hets, "1")
-		if err != nil {
-			log.Fatal(err)
-		}
+		homs, hets, missing = makeHetHomozygotes(record, header, "1")
+
 		if len(homs) == 0 && len(hets) == 0 {
 			return
 		}
 	}
+
 	var output bytes.Buffer
 	output.WriteString(record[chromIdx])
 	output.WriteString("\t")
@@ -305,21 +327,34 @@ func processSingleLine(record []string, header []string,
 	output.WriteString("\t")
 	output.WriteString(alt)
 	output.WriteString("\t")
+
 	if len(hets) == 0 {
 		output.WriteString(emptyField)
 	} else {
 		output.WriteString(strings.Join(hets, fieldDelimiter))
 	}
+
 	output.WriteString("\t")
+
 	if len(homs) == 0 {
 		output.WriteString(emptyField)
 	} else {
 		output.WriteString(strings.Join(homs, fieldDelimiter))
 	}
+
+	output.WriteString("\t")
+
+	if len(missing) == 0 {
+		output.WriteString(emptyField)
+	} else {
+		output.WriteString(strings.Join(missing, fieldDelimiter))
+	}
+
 	if keepId == true {
 		output.WriteString("\t")
 		output.WriteString(record[idIdx])
 	}
+
 	if keepInfo == true {
 		// Write the index of the allele, to allow users to segregate data in the INFO field
 		// Of course in singl allele case, index is 0 (index is relative to alt alleles, not ref + alt)
@@ -329,9 +364,11 @@ func processSingleLine(record []string, header []string,
 		// INFO index is 7
 		output.WriteString(record[infoIdx])
 	}
+
 	output.WriteString("\n")
 	results <- output.String()
 }
+
 func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) (string, string, string, string, error) {
 	/*********************** SNPs *********************/
 	if len(alt) == len(ref) {
@@ -339,6 +376,7 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
 			// No point in returning ref sites
 			return "", "", "", "", nil
 		}
+
 		if len(ref) > 1 {
 			// SNPs that are multiallelic with indels, can be longer than 1 base long
 			// Confusingly enough, so can MNPs
@@ -349,41 +387,55 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
 				// Currently we haven't enabled MNP parsing in the caller
 				return "", "", "", "", nil
 			}
-			var count int
+
 			diffIdx := -1
 			// Let's check each base; if there is more than 1 change, that is an error
 			for i := 0; i < len(ref); i++ {
 				if ref[i] != alt[i] {
+					// Major red flag, there should never be a len(ref) == len(alt) allele that isn't an MNP or SNP
+					// TODO: should we relax this? If we allow MNP, may as well allow sparse MNPs
+					if diffIdx > -1 {
+						return "", "", "", "", nil
+					}
+
 					diffIdx = i
-					count++
 				}
 			}
-			// SNPs should of course have only 1 change
-			if count > 1 || diffIdx == -1 {
-				return "", "", "", "", nil
+
+			// Most cases are diffIdx == 0, allow us to skip 1 strconv.Atoi, 1 assignment, 1 strconv.Itoa, and 1 addition
+			if diffIdx == 0 {
+				return "SNP", pos, string(ref[diffIdx]), string(alt[diffIdx]), nil
 			}
+
 			intPos, _ := strconv.Atoi(pos)
 			return "SNP", strconv.Itoa(intPos + diffIdx), string(ref[diffIdx]), string(alt[diffIdx]), nil
 		}
+
 		return "SNP", pos, ref, alt, nil
 	}
+
 	/*********************** INSERTIONS AND DELETIONS *********************/
 	// TODO: Handle case where first base of contig is deleted, and padded as the first unmodified base downstream
 	//First base is always padding
 	if ref[0] != alt[0] {
 		return "", "", "", "", nil
 	}
+
 	/*************************** DELETIONS FIRST **************************/
 	if len(ref) > len(alt) {
 		intPos, err := strconv.Atoi(pos)
 		if err != nil {
 			return "", "", "", "", err
 		}
+
 		// Simple insertions delete the entire reference, sans the padding base to the left
 		// TODO: handle 1st base deleted in contig, padded to right
 		if len(alt) == 1 {
 			return "DEL", strconv.Itoa(intPos + 1), string(ref[1]), strconv.Itoa(1 - len(ref)), nil
 		}
+
+		// log.Println("Complex del", pos, ref, alt, multiallelic)
+
 		// Complex deletions, inside of a reference
 		// Ex: Ref: TCT Alt: T, TT (the TT is a 1 base C deletion)
 		//this typically only comes up with multiallelics that have a 2nd deletion, that covers all bases (excepting 1 padding base) in the reference
@@ -391,6 +443,7 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
 		if multiallelic == false {
 			return "", "", "", "", nil
 		}
+
 		// Our deletion should happen within the reference, so the non-padded
 		// portion of the reference is what we'll check
 		if strings.Contains(ref, alt[1: ]) == false {
@@ -399,6 +452,7 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
 		// TODO: More precise checking; for instance we can check if the alt is contained within the end of the ref (sans the 1 base deletion)
 		return "DEL", strconv.Itoa(intPos + 1), string(ref[1]), strconv.Itoa(len(alt) - len(ref)), nil
 	}
+
 	/*********************** INSERTIONS *********************/
 	// len(ref) > 1 should always indicate that this is a multiallelic that contains a deletion
 	// therefore requiring 1 base of padding to the left
@@ -407,6 +461,9 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
 		if multiallelic == false {
 			return "", "", "", "", nil
 		}
+
+		// log.Println("Complex ins", pos, ref, alt, multiallelic)
+
 		// Our insertion should happen within the reference, so the non-padded
 		// portion of the reference is what we'll check
 		if strings.Contains(alt, ref[1: ]) == false {
@@ -418,61 +475,82 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
 		insBuffer.WriteString(alt[1:len(alt) - len(ref) + 1])
 		return "INS", pos, string(ref[0]), insBuffer.String(), nil
 	}
+
 	var insBuffer bytes.Buffer
 	insBuffer.WriteString("+")
 	insBuffer.WriteString(alt[1:])
 	return "INS", pos, ref, insBuffer.String(), nil
 }
-func makeHetHomozygotes(fields []string, header []string, homsArr *[]string, hetsArr *[]string, alleleIdx string) error {
-	simpleGT := fields[formatIdx] == "GT"
+
+func makeHetHomozygotes(fields []string, header []string, alleleIdx string) ([]string, []string, []string) {
+	simpleGt := strings.Contains(fields[formatIdx], ":")
+
 	gt := make([]string, 0, 2)
 	gtCount := 0
 	altCount := 0
-SAMPLES:
-	for i := 9; i < len(header); i++ {
-		if strings.Contains(fields[i], "|") {
-			gt = strings.Split(fields[i], "|")
-		} else {
-			gt = strings.Split(fields[i], "/")
-		}
-		altCount = 0
-		gtCount = 0
-		if simpleGT {
-			for _, val := range gt {
-				if val == "." {
+	
+	var homs []string
+	var hets []string
+	var missing []string
+
+	SAMPLES:
+		for i := 9; i < len(header); i++ {
+			if strings.Contains(fields[i], "|") {
+				if (simpleGt && strings.Contains(fields[i], "0|0:")) || fields[i] == "0|0" {
+					continue
+				}
+
+				if strings.Contains(fields[i], ".|.") {
+					missing = append(missing, header[i])
 					continue SAMPLES
 				}
-				if val == alleleIdx {
-					altCount++
+
+				gt = strings.Split(fields[i], "|")
+			} else {
+				if (simpleGt && strings.Contains(fields[i], "0/0:")) || fields[i] == "0/0" {
+					continue
 				}
-				gtCount++
+
+				if strings.Contains(fields[i], "./.") {
+					missing = append(missing, header[i])
+					continue SAMPLES
+				}
+
+				gt = strings.Split(fields[i], "/")
 			}
-		} else {
+
+			altCount = 0
+			gtCount = 0
 			for _, val := range gt {
 				if val == "." {
+					missing = append(missing, header[i])
 					continue SAMPLES
 				}
+
 				// val[0] doesn't work...because byte array?
-				if val[0:1] == alleleIdx {
+				if string(val[0]) == alleleIdx {
 					altCount++
 				}
+
 				gtCount++
 			}
+
+			if altCount == 0 {
+				continue
+			}
+
+			if altCount == gtCount {
+				homs = append(homs, header[i])
+			} else {
+				hets = append(hets, header[i])
+			}
 		}
-		if altCount == 0 {
-			continue
-		}
-		if altCount == gtCount {
-			*homsArr = append(*homsArr, header[i])
-		} else {
-			*hetsArr = append(*hetsArr, header[i])
-		}
-	}
-	return nil
+
+	return homs, hets, missing
 }
+
 func normalizeSampleNames(header []string) {
 	for i := 9; i < len(header); i++ {
 		header[i] = strings.Replace(header[i], ".", "_", -1)
 	}
 }
-// func coercePositionsAlleles(emptyField string, primaryDelim string) func(string) bool {
