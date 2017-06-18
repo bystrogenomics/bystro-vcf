@@ -5,6 +5,7 @@ import (
 	"testing"
 	"sync"
 	"strconv"
+	"fmt"
 )
 
 func TestKeepFlagsTrue(t *testing.T) {
@@ -37,7 +38,7 @@ func TestKeepFlagsTrue(t *testing.T) {
 func TestUpdateFieldsWithAlt(t *testing.T) {
 	expType, exPos, expRef, expAlt := "SNP", "100", "T", "C"
 
-	sType, pos, ref, alt, err := updateFieldsWithAlt("T", "C", "100")
+	sType, pos, ref, alt, err := updateFieldsWithAlt("T", "C", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed")
@@ -47,7 +48,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "SNP", "103", "T", "A"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "TCCA", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "TCCA", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -57,7 +58,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "SNP", "102", "C", "A"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "TGAT", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "TGAT", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -67,7 +68,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "SNP", "100", "T", "A"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "AGCT", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "AGCT", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -77,7 +78,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "", "", "", ""
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "GTAA", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "GTAA", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -87,7 +88,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "DEL", "101", "C", "-1"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TC", "T", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TC", "T", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -97,7 +98,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "DEL", "101", "A", "-5"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCGT", "T", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCGT", "T", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -105,9 +106,22 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 		t.Log("OK: Deletions with references longer than 2 bases")
 	}
 
-	expType, exPos, expRef, expAlt = "DEL", "102", "G", "-4"
+	// Test multiallelic intercolated deletion
+	expType, exPos, expRef, expAlt = "DEL", "101", "A", "-4"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TA", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TA", "100", true)
+
+	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	} else {
+		t.Log("OK: Deletions longer than 1 base")
+	}
+
+	// If not multiallelic, the same deletion should be skipped, as it is odd,
+	// and the position doesn't make sense
+	expType, exPos, expRef, expAlt = "", "", "", ""
+
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TA", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -117,7 +131,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "", "", "", ""
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TAC", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TAC", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -127,7 +141,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	expType, exPos, expRef, expAlt = "INS", "100", "T", "+AGCTT"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("T", "TAGCTT", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("T", "TAGCTT", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
@@ -135,24 +149,27 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 		t.Log("OK: Insertions where reference is 1 base long")
 	}
 
-	expType, exPos, expRef, expAlt = "INS", "101", "A", "+GCTT"
+	// Test multiallelic
+	// say came from TT T, TAGCTT
+	// I believe the answer is, this should be a +AGCT in between then two T's
+	expType, exPos, expRef, expAlt = "INS", "100", "T", "+AGCT"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TA", "TAGCTT", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TT", "TAGCTT", "100", true)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
-		t.Log("OK: Insertions where reference is 2 bases long")
+		t.Log("OK: Multiallelics insertion where reference is 2 bases long")
 	}
 
 	expType, exPos, expRef, expAlt = "", "", "", ""
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TT", "TAGCTT", "100")
+	sType, pos, ref, alt, err = updateFieldsWithAlt("TT", "TAGCTT", "100", false)
 
 	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
 		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
 	} else {
-		t.Log("OK: Insertions where reference and alt don't share a left edge are skipped")
+		t.Log("OK: Non-multiallelic insertions, whose ref are 2 bases long are skipped")
 	}
 }
 
@@ -163,7 +180,8 @@ func TestPassesLine(t *testing.T) {
 	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
 	record := []string{"20", "4", ".", "GCG", "G,GCGCG", ".", "PASS", "DP=100"}
 
-	actual := linePasses(record, header)
+	keepFiltered := map[string]bool{ "PASS": true, ".": true}
+	actual := linePasses(record, header, keepFiltered)
 
 	if actual == expect {
 		t.Log("OK: PASS lines pass")
@@ -173,7 +191,7 @@ func TestPassesLine(t *testing.T) {
 
 	record = []string{"20", "4", ".", "GCG", "G,GCGCG", ".", ".", "DP=100"}
 
-	actual = linePasses(record, header)
+	actual = linePasses(record, header, keepFiltered)
 
 	if actual == expect {
 		t.Log("OK: lines with missing (.) values under FILTER pass")
@@ -770,7 +788,9 @@ func TestOutputMultiallelic(t *testing.T) {
 	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}
 	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
 	//Except use A as last base, to properly distinguish first and last base of reference
-	record := []string{"20", "4", ".", "GCA", "G,GCACG", ".", "PASS", "DP=100"}
+	record := []string{"20", "4", ".", "GCACG", "G,GTCACACG", ".", "PASS", "DP=100"}
+
+	keepFiltered := map[string]bool{ "PASS": true, ".": true}
 
 	emptyField := "!"
 	fieldDelimiter := ";"
@@ -780,7 +800,7 @@ func TestOutputMultiallelic(t *testing.T) {
 	wg := new(sync.WaitGroup)
 
 	go func(){
-		if linePasses(record, header) == false {
+		if linePasses(record, header, keepFiltered) == false {
 			t.Error("NOT OK: Line should pass", record, header)
 		}
 
@@ -797,7 +817,7 @@ func TestOutputMultiallelic(t *testing.T) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if index == 0 {
-  		if resultRow[altIdx] == "-2" {
+  		if resultRow[altIdx] == "-4" {
   			t.Log("OK: 2 base deletion recapitulated", resultRow)
   		} else {
   			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
@@ -818,24 +838,11 @@ func TestOutputMultiallelic(t *testing.T) {
 		}
 
 		if index == 1 {
-  		if resultRow[altIdx] == "+CG" {
+  		if resultRow[altIdx] == "+TCA" && resultRow[posIdx] == "4" && resultRow[refIdx] == "G" {
   			t.Log("OK: 2 base deletion recapitulated", resultRow)
   		} else {
   			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
   		}
-			
-			if resultRow[posIdx] == "6" {
-				t.Log("OK: Insertion should be shifted by padded base to last reference base", resultRow)
-			} else {
-				// This means by len(G) in this case
-				t.Error("NOT OK: Insertion should be shifted by padded base to last reference base", resultRow)
-			}
-
-			if resultRow[refIdx] == "A" {
-				t.Log("OK: In insertion, reference base should be last reference in REF string", resultRow)
-			} else {
-				t.Error("NOT OK: In insertion, reference base should be last reference in REF string", resultRow)
-			}
 		}
 	}
 
@@ -843,5 +850,134 @@ func TestOutputMultiallelic(t *testing.T) {
 		t.Log("OK: parsed 2 alleles")
 	} else {
 		t.Error("NOT OK: Expected to parse 2 alleles")
+	}
+}
+
+func TestOutputComplexMultiDel(t *testing.T) {
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}
+	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
+	//Test from gnomad genomes
+	record := []string{"16", "84034434", "rs141446650", "GAGGGAGACAGAGGGAAGT", "G,GGGGAGACAGAGGGAAGT", ".", "PASS", "DP=100"}
+
+	keepFiltered := map[string]bool{ "PASS": true, ".": true}
+
+	emptyField := "!"
+	fieldDelimiter := ";"
+
+	c := make(chan string)
+	// I think we need a wait group, not sure.
+	wg := new(sync.WaitGroup)
+
+	go func(){
+		if linePasses(record, header, keepFiltered) == false {
+			t.Error("NOT OK: Line should pass", record, header)
+		}
+
+		wg.Add(1)
+		go processLine(record, header, emptyField, fieldDelimiter, false, false, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+	index := -1;
+  for row := range c {
+  	index++
+
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if index == 0 {
+  		if resultRow[refIdx] == "A" && resultRow[posIdx] == strconv.Itoa(84034434 + 1) && resultRow[altIdx] == "-18" {
+  			t.Log("OK: 18 base deletion recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK: 18 base deletion not recapitulated", resultRow)
+  		}
+		}
+
+		if index == 1 {
+  		if resultRow[refIdx] == "A" && resultRow[posIdx] == strconv.Itoa(84034434 + 1) && resultRow[altIdx] == "-1" {
+  			t.Log("OK: Complex 1 base deletion recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK: 1 base deletion not recapitulated", resultRow)
+  		}
+		}
+	}
+
+	if index == 1 {
+		t.Log("OK: parsed 2 alleles")
+	} else {
+		t.Error("NOT OK: Expected to parse 2 alleles")
+	}
+}
+
+func TestOutputComplexDel(t *testing.T) {
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}
+	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
+	//Test from gnomad genomes
+	record := []string{"1", "874816", "rs200996316", "CCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT", "CCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,GCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,C,CTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT", ".", "PASS", "DP=100"}
+
+	keepFiltered := map[string]bool{ "PASS": true, ".": true}
+
+	emptyField := "!"
+	fieldDelimiter := ";"
+
+	c := make(chan string)
+	// I think we need a wait group, not sure.
+	wg := new(sync.WaitGroup)
+
+	go func(){
+		if linePasses(record, header,keepFiltered) == false {
+			t.Error("NOT OK: Line should pass", record, header)
+		}
+
+		wg.Add(1)
+		go processLine(record, header, emptyField, fieldDelimiter, false, false, c, wg)
+		wg.Wait();
+		close(c)
+	}()
+
+	index := -1;
+  for row := range c {
+  	index++
+
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	fmt.Println(index, resultRow)
+  	if index == 0 {
+  		if resultRow[refIdx] == "C" && resultRow[posIdx] == "874816" && resultRow[altIdx] == "+CCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT" {
+  			t.Log("OK: Intercolated insertion +CCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT in complex, multiallelic microsatellite recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK: Intercolated insertion +CCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT in complex, multiallelic microsatellite not recapitulated", resultRow)
+  		}
+		}
+
+		if index == 1 {
+  		if resultRow[refIdx] == "C" && resultRow[posIdx] == "874816" && resultRow[altIdx] == "G" {
+  			t.Log("OK: SNP in complex ultiallelic microsatellite recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK: SNP in complex multiallelic microsatellite recapitulated", resultRow)
+  		}
+		}
+
+		if index == 2 {
+  		if resultRow[refIdx] == "C" && resultRow[posIdx] == "874817" && resultRow[altIdx] == "-49" {
+  			t.Log("OK: 49bp DEL in complex microsatellite multiallelic recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK: 49bp DEL in complex microsatellite multiallelic recapitulated", resultRow)
+  		}
+		}
+
+  	if index == 3 {
+  		if resultRow[refIdx] == "C" && resultRow[posIdx] == "874816" && resultRow[altIdx] == "+T" {
+  			t.Log("OK: Intercolated insertion +T recapitulated", resultRow)
+  		} else {
+  			t.Error("NOT OK: Intercolated insertion +T not recapitulated", resultRow)
+  		}
+		}
+	}
+
+	if index == 3 {
+		t.Log("Ok, recapitulated 4 alleles")
+	} else {
+		t.Error("expected 4 alleles")
 	}
 }
