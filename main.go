@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"runtime/pprof"
+	"regexp"
 )
 const chromIdx int = 0
 const posIdx int = 1
@@ -22,6 +22,7 @@ const qualIdx int = 5
 const filterIdx int = 6
 const infoIdx int = 7
 const formatIdx int = 8
+
 type Config struct {
 	inPath string
 	errPath string
@@ -32,6 +33,7 @@ type Config struct {
 	cpuProfile string
 	keepFiltered map[string]bool
 }
+
 func setup(args []string) *Config {
 	config := &Config{}
 	flag.StringVar(&config.inPath, "inPath", "", "The input file path (optional: default is stdin)")
@@ -63,24 +65,24 @@ func setup(args []string) *Config {
   }
 	return config
 }
+
 func init() {
 	log.SetFlags(0)
 }
+
 // NOTE: For now this only supports \n end of line characters
 // If we want to support CLRF or whatever, use either csv package, or set a different delimiter
 func main() {
 	config := setup(nil)
-	if config.cpuProfile != "" {
-		f, err := os.Create(config.cpuProfile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
+
+	readVCF(config)
+}
+
+func readVCF (config *Config) {
 	inFh := (*os.File)(nil)
 	if config.inPath != "" {
 		var err error
+
 		inFh, err = os.Open(config.inPath)
 		if err != nil {
 			log.Fatal(err)
@@ -88,6 +90,7 @@ func main() {
 	} else {
 		inFh = os.Stdin
 	}
+
 	// make sure it gets closed
 	defer inFh.Close()
 	if config.errPath != "" {
@@ -97,28 +100,57 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+
 	reader := bufio.NewReader(inFh)
+	
 	foundHeader := false
+
 	// checkedChrType := false
 	//Predeclar sampleNames to be a large item
 	var header []string
+	
 	c := make(chan string)
+	
 	// I think we need a wait group, not sure.
 	wg := new(sync.WaitGroup)
+	
+	var record []string
+
+	endOfLineByte, numChars, versionLine, err := findEndOfLineChar(reader, "")
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	vcfMatch, err := regexp.MatchString("##fileformat=VCFv4", versionLine)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if !vcfMatch {
+		log.Fatal("Not a VCF file")
+	}
+
+	// reader = bufio.NewReader(inFh)
+	// check line endings
 	for {
 		// http://stackoverflow.com/questions/8757389/reading-file-line-by-line-in-go
 		// http://www.jeffduckett.com/blog/551119d6c6b86364cef12da7/golang---read-a-file-line-by-line.html
 		// Scanner doesn't work well, has buffer restrictions that we need to manually get around
 		// and we don't expect any newline characters in a Seqant output body
-		row, err := reader.ReadString('\n') // 0x0A separator = newline
+		row, err := reader.ReadString(endOfLineByte) // 0x0A separator = newline
+		
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			log.Fatal(err)
 		}
-		// // remove the trailing \n
-		// // equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
-		record := strings.Split(row[:len(row)-1], "\t")
+
+		// remove the trailing \n or \r
+		// equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
+		record = strings.Split(row[:len(row) - numChars], "\t")
+
 		if foundHeader == false {
 			if record[chromIdx] == "#CHROM" {
 				header = record
@@ -127,38 +159,84 @@ func main() {
 			}
 		}
 	}
+
 	// TODO: will we be more efficient if we pre-make these and clear them each round?
 	// homSingle := make([]string, 0, lastIndx-8)
 	// hetsSingle := make([]string, 0, lastIndx-8)
 	// homMulti := make([]string, 0, lastIndx-8)
 	// hetsMulti := make([]string, 0, lastIndx-8)
 	normalizeSampleNames(header)
+
 	go func() {
+		var record []string
 		for {
-			row, err := reader.ReadString('\n') // 0x0A separator = newline
+			row, err := reader.ReadString(endOfLineByte) // 0x0A separator = newline
+
 			if err == io.EOF {
 				break
 			} else if err != nil {
 				log.Fatal(err)
 			}
-			// remove the trailing \n
+
+			// remove the trailing \n or \r
 			// equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
-			record := strings.Split(row[:len(row)-1], "\t")
+			record = strings.Split(row[:len(row) - numChars], "\t")
+
 			if linePasses(record, header, config.keepFiltered) == false {
 				continue
 			}
+
 			wg.Add(1)
 			go processLine(record, header, config.emptyField, config.fieldDelimiter, config.keepId, config.keepInfo, c, wg)
 		}
+
 		wg.Wait()
 		close(c)
 	}()
+	
 	// Write all the data
 	// Somewhat surprisingly this is faster than building up array and writing in builk
 	for data := range c {
-		fmt.Print(data)
+		fmt.Println(data)
 	}
 }
+
+func findEndOfLineChar (r *bufio.Reader, s string) (byte, int, string, error) {
+	runeChar, _, err := r.ReadRune()
+
+	if err != nil {
+		return byte(0), 0, "", err
+	}
+
+	if runeChar == '\r' {
+		nextByte, err := r.Peek(1)
+
+		if err != nil {
+			return byte(0), 0, "", err
+		}
+
+		if rune(nextByte[0]) == '\n' {
+			//Remove the line feed
+			_, _, err = r.ReadRune()
+
+			if err != nil {
+				return byte(0), 0, "", err
+			}
+		
+			return nextByte[0], 2, s, nil
+		}
+
+		return byte('\r'), 1, s, nil
+	}
+
+	if runeChar == '\n' {
+		return byte('\n'), 1, s, nil
+	}
+
+	s += string(runeChar)
+	return findEndOfLineChar(r, s)
+}
+
 func chrToUCSC(chr string) string {
 	if len(chr) < 4 || chr[0:2] != "ch" {
 		var buff bytes.Buffer
@@ -168,9 +246,11 @@ func chrToUCSC(chr string) string {
 	}
 	return chr
 }
+
 func linePasses(record []string, header []string, filterKeys map[string]bool) bool {
 	return len(record) == len(header) && len(filterKeys) == 0 || filterKeys[record[filterIdx]] == true
 }
+
 func altIsValid(alt string) bool {
 	if len(alt) == 1 {
 		if alt != "A" && alt != "C" && alt != "T" && alt != "G" {
@@ -189,6 +269,7 @@ func altIsValid(alt string) bool {
 	}
 	return true
 }
+
 // Without this (calling each separately) real real	1m0.753s, with:	1m0.478s
 func processLine(record []string, header []string, emptyField string,
 	fieldDelimiter string, keepId bool, keepInfo bool, c chan<- string, wg *sync.WaitGroup) {
@@ -199,6 +280,7 @@ func processLine(record []string, header []string, emptyField string,
 		processSingleLine(record, header, emptyField, fieldDelimiter, keepId, keepInfo, c, wg)
 	}
 }
+
 func processMultiLine(record []string, header []string, emptyField string,
 	fieldDelimiter string, keepId bool, keepInfo bool, results chan<- string, wg *sync.WaitGroup) {
 	defer wg.Done()
