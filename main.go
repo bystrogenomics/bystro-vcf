@@ -102,18 +102,18 @@ func readVCF (config *Config) {
 	}
 
 	reader := bufio.NewReader(inFh)
-	
+
 	foundHeader := false
 
 	// checkedChrType := false
 	//Predeclar sampleNames to be a large item
 	var header []string
-	
+
 	c := make(chan string)
-	
+
 	// I think we need a wait group, not sure.
 	wg := new(sync.WaitGroup)
-	
+
 	var record []string
 
 	endOfLineByte, numChars, versionLine, err := findEndOfLineChar(reader, "")
@@ -140,7 +140,7 @@ func readVCF (config *Config) {
 		// Scanner doesn't work well, has buffer restrictions that we need to manually get around
 		// and we don't expect any newline characters in a Seqant output body
 		row, err := reader.ReadString(endOfLineByte) // 0x0A separator = newline
-		
+
 		if err == io.EOF {
 			break
 		} else if err != nil {
@@ -169,6 +169,7 @@ func readVCF (config *Config) {
 
 	go func() {
 		var record []string
+
 		for {
 			row, err := reader.ReadString(endOfLineByte) // 0x0A separator = newline
 
@@ -176,6 +177,10 @@ func readVCF (config *Config) {
 				break
 			} else if err != nil {
 				log.Fatal(err)
+			} else if row == "" {
+				// We may have not closed the pipe, but not have any more information to send
+				// Wait for EOF
+				continue
 			}
 
 			// remove the trailing \n or \r
@@ -193,11 +198,11 @@ func readVCF (config *Config) {
 		wg.Wait()
 		close(c)
 	}()
-	
+
 	// Write all the data
 	// Somewhat surprisingly this is faster than building up array and writing in builk
 	for data := range c {
-		fmt.Println(data)
+		fmt.Print(data)
 	}
 }
 
@@ -222,7 +227,7 @@ func findEndOfLineChar (r *bufio.Reader, s string) (byte, int, string, error) {
 			if err != nil {
 				return byte(0), 0, "", err
 			}
-		
+
 			return nextByte[0], 2, s, nil
 		}
 
@@ -570,7 +575,7 @@ func makeHetHomozygotes(fields []string, header []string, alleleIdx string) ([]s
 	gt := make([]string, 0, 2)
 	gtCount := 0
 	altCount := 0
-	
+
 	var homs []string
 	var hets []string
 	var missing []string
