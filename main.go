@@ -132,8 +132,7 @@ func readVCF (config *Config) {
 		log.Fatal("Not a VCF file")
 	}
 
-	// reader = bufio.NewReader(inFh)
-	// check line endings
+	// Get the header
 	for {
 		// http://stackoverflow.com/questions/8757389/reading-file-line-by-line-in-go
 		// http://www.jeffduckett.com/blog/551119d6c6b86364cef12da7/golang---read-a-file-line-by-line.html
@@ -145,6 +144,9 @@ func readVCF (config *Config) {
 			break
 		} else if err != nil {
 			log.Fatal(err)
+		} else if row == "" {
+			// This shouldn't occur, however, in case
+			continue
 		}
 
 		// remove the trailing \n or \r
@@ -160,11 +162,11 @@ func readVCF (config *Config) {
 		}
 	}
 
-	// TODO: will we be more efficient if we pre-make these and clear them each round?
-	// homSingle := make([]string, 0, lastIndx-8)
-	// hetsSingle := make([]string, 0, lastIndx-8)
-	// homMulti := make([]string, 0, lastIndx-8)
-	// hetsMulti := make([]string, 0, lastIndx-8)
+	if !foundHeader {
+		log.Fatal("No header found")
+	}
+
+	// Remove periods from sample names
 	normalizeSampleNames(header)
 
 	go func() {
@@ -637,7 +639,9 @@ func makeHetHomozygotes(fields []string, header []string, alleleIdx string) ([]s
 }
 
 func normalizeSampleNames(header []string) {
+	re := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+
 	for i := 9; i < len(header); i++ {
-		header[i] = strings.Replace(header[i], ".", "_", -1)
+		header[i] = re.ReplaceAllString(header[i], "_")
 	}
 }
