@@ -13,6 +13,8 @@ import (
 	"sync"
 	"regexp"
 )
+
+const concurrency int = 8
 const chromIdx int = 0
 const posIdx int = 1
 const idIdx int = 2
@@ -75,10 +77,6 @@ func init() {
 func main() {
 	config := setup(nil)
 
-	readVCF(config)
-}
-
-func readVCF (config *Config) {
 	inFh := (*os.File)(nil)
 	if config.inPath != "" {
 		var err error
@@ -103,24 +101,26 @@ func readVCF (config *Config) {
 
 	reader := bufio.NewReader(inFh)
 
+	readVCF(config, reader, func(row string) {fmt.Print(row)})
+}
+
+func readVCF (config *Config, reader *bufio.Reader, resultFunc func(row string)) {
 	foundHeader := false
 
-	// checkedChrType := false
-	//Predeclar sampleNames to be a large item
 	var header []string
 
-	c := make(chan string)
-
-	// I think we need a wait group, not sure.
-	wg := new(sync.WaitGroup)
-
-	var record []string
+	// Read buffer
+	workQueue := make(chan string, 100)
+	complete := make(chan bool)
+	// Write buffer
+	results := make(chan string, 100)
+	var wg sync.WaitGroup
 
 	endOfLineByte, numChars, versionLine, err := findEndOfLineChar(reader, "")
 
-	if err != nil {
-		log.Fatal(err)
-	}
+  if err != nil {
+    log.Fatal(err)
+  }
 
 	vcfMatch, err := regexp.MatchString("##fileformat=VCFv4", versionLine)
 
@@ -151,7 +151,7 @@ func readVCF (config *Config) {
 
 		// remove the trailing \n or \r
 		// equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
-		record = strings.Split(row[:len(row) - numChars], "\t")
+		record := strings.Split(row[:len(row) - numChars], "\t")
 
 		if foundHeader == false {
 			if record[chromIdx] == "#CHROM" {
@@ -169,43 +169,50 @@ func readVCF (config *Config) {
 	// Remove periods from sample names
 	normalizeSampleNames(header)
 
+	// Read the lines into the work queue.
 	go func() {
-		var record []string
-
 		for {
 			row, err := reader.ReadString(endOfLineByte) // 0x0A separator = newline
 
-			if err == io.EOF {
-				break
-			} else if err != nil {
-				log.Fatal(err)
-			} else if row == "" {
-				// We may have not closed the pipe, but not have any more information to send
-				// Wait for EOF
-				continue
-			}
+      if err == io.EOF {
+        break
+      } else if err != nil {
+        log.Fatal(err)
+      } else if row == "" {
+        // We may have not closed the pipe, but not have any more information to send
+        // Wait for EOF
+        continue
+      }
 
-			// remove the trailing \n or \r
-			// equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
-			record = strings.Split(row[:len(row) - numChars], "\t")
-
-			if linePasses(record, header, config.keepFiltered) == false {
-				continue
-			}
-
-			wg.Add(1)
-			go processLine(record, header, config.emptyField, config.fieldDelimiter, config.keepId, config.keepInfo, c, wg)
+			workQueue <- row[:len(row) - numChars];
 		}
 
-		wg.Wait()
-		close(c)
+		// Close the channel so everyone reading from it knows we're done.
+		close(workQueue)
 	}()
 
-	// Write all the data
-	// Somewhat surprisingly this is faster than building up array and writing in builk
-	for data := range c {
-		fmt.Print(data)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for line := range results {
+			resultFunc(line)
+		}
+	}()
+
+	// Now read them all off, concurrently.
+	for i := 0; i < concurrency; i++ {
+		go processLines(header, config.emptyField, config.fieldDelimiter, config.keepId,
+			config.keepInfo, config.keepFiltered, workQueue, results, complete)
 	}
+
+	// Wait for everyone to finish.
+	for i := 0; i < concurrency; i++ {
+		<-complete
+	}
+
+	close(results)
+
+	wg.Wait()
 }
 
 func findEndOfLineChar (r *bufio.Reader, s string) (byte, int, string, error) {
@@ -277,185 +284,96 @@ func altIsValid(alt string) bool {
 	return true
 }
 
-// Without this (calling each separately) real real	1m0.753s, with:	1m0.478s
-func processLine(record []string, header []string, emptyField string,
-	fieldDelimiter string, keepId bool, keepInfo bool, c chan<- string, wg *sync.WaitGroup) {
-	record[chromIdx] = chrToUCSC(record[chromIdx])
-	if strings.Contains(record[altIdx], ",") {
-		processMultiLine(record, header, emptyField, fieldDelimiter, keepId, keepInfo, c, wg)
-	} else {
-		processSingleLine(record, header, emptyField, fieldDelimiter, keepId, keepInfo, c, wg)
-	}
-}
-
-func processMultiLine(record []string, header []string, emptyField string,
-	fieldDelimiter string, keepId bool, keepInfo bool, results chan<- string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	var homs []string
-	var hets []string
-	var missing []string
-
-	for idx, allele := range strings.Split(record[altIdx], ",") {
-		if altIsValid(allele) == false {
-			log.Printf("%s:%s Skip ALT #%d (not ACTG)", record[chromIdx], record[posIdx], idx+1)
+func processLines(header []string, emptyField string, fieldDelimiter string, keepId bool, keepInfo bool,
+keepFiltered map[string]bool, queue chan string, results chan string, complete chan bool) {
+	for line := range queue {
+		record := strings.Split(line, "\t")
+		
+		if !linePasses(record, header, keepFiltered) {
 			continue
 		}
 
-		siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx], true)
-		if err != nil {
-			log.Fatal(err)
-		}
+		var homs []string
+		var hets []string
+		var missing []string
 
-		if pos == "" {
-			log.Printf("%s:%s Skip ALT #%d (complex)", record[chromIdx], record[posIdx], idx+1)
-			continue
-		}
-
-		// If no sampels are provided, annotate what we can, skipping hets and homs
-		if len(header) > 9 {
-			homs, hets, missing = makeHetHomozygotes(record, header, strconv.Itoa(idx+1))
-
-			if len(homs) == 0 && len(hets) == 0 {
+		for idx, allele := range strings.Split(record[altIdx], ",") {
+			if altIsValid(allele) == false {
+				log.Printf("%s:%s Skip ALT #%d (not ACTG)", record[chromIdx], record[posIdx], idx+1)
 				continue
 			}
-		}
 
-		var output bytes.Buffer
-		output.WriteString(record[chromIdx])
-		output.WriteString("\t")
-		output.WriteString(pos)
-		output.WriteString("\t")
-		output.WriteString(siteType)
-		output.WriteString("\t")
-		output.WriteString(ref)
-		output.WriteString("\t")
-		output.WriteString(alt)
-		output.WriteString("\t")
+			siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx], true)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		if len(hets) == 0 {
-			output.WriteString(emptyField)
-		} else {
-			output.WriteString(strings.Join(hets, fieldDelimiter))
-		}
+			if pos == "" {
+				log.Printf("%s:%s Skip ALT #%d (complex)", record[chromIdx], record[posIdx], idx+1)
+				continue
+			}
 
-		output.WriteString("\t")
+			// If no sampels are provided, annotate what we can, skipping hets and homs
+			if len(header) > 9 {
+				homs, hets, missing = makeHetHomozygotes(record, header, strconv.Itoa(idx+1))
 
-		if len(homs) == 0 {
-			output.WriteString(emptyField)
-		} else {
-			output.WriteString(strings.Join(homs, fieldDelimiter))
-		}
+				if len(homs) == 0 && len(hets) == 0 {
+					continue
+				}
+			}
 
-		output.WriteString("\t")
-
-		if len(missing) == 0 {
-			output.WriteString(emptyField)
-		} else {
-			output.WriteString(strings.Join(missing, fieldDelimiter))
-		}
-
-		if keepId == true {
+			var output bytes.Buffer
+			output.WriteString(record[chromIdx])
 			output.WriteString("\t")
-			output.WriteString(record[idIdx])
-		}
-
-		if keepInfo == true {
-			// Write the index of the allele, to allow users to segregate data in the INFO field
+			output.WriteString(pos)
 			output.WriteString("\t")
-			output.WriteString(strconv.Itoa(idx))
+			output.WriteString(siteType)
 			output.WriteString("\t")
-			// INFO index is 7
-			output.WriteString(record[infoIdx])
+			output.WriteString(ref)
+			output.WriteString("\t")
+			output.WriteString(alt)
+			output.WriteString("\t")
+
+			if len(hets) == 0 {
+				output.WriteString(emptyField)
+			} else {
+				output.WriteString(strings.Join(hets, fieldDelimiter))
+			}
+
+			output.WriteString("\t")
+
+			if len(homs) == 0 {
+				output.WriteString(emptyField)
+			} else {
+				output.WriteString(strings.Join(homs, fieldDelimiter))
+			}
+
+			output.WriteString("\t")
+
+			if len(missing) == 0 {
+				output.WriteString(emptyField)
+			} else {
+				output.WriteString(strings.Join(missing, fieldDelimiter))
+			}
+
+			if keepId == true {
+				output.WriteString("\t")
+				output.WriteString(record[idIdx])
+			}
+
+			if keepInfo == true {
+				// Write the index of the allele, to allow users to segregate data in the INFO field
+				output.WriteString("\t")
+				output.WriteString(strconv.Itoa(idx))
+				output.WriteString("\t")
+				// INFO index is 7
+				output.WriteString(record[infoIdx])
+			}
+
+			output.WriteString("\n")
+			results <- output.String()
 		}
-
-		output.WriteString("\n")
-		results <- output.String()
 	}
-}
-
-func processSingleLine(record []string, header []string,
-	emptyField string, fieldDelimiter string, keepId bool, keepInfo bool, results chan<- string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	if altIsValid(record[altIdx]) == false {
-		log.Printf("%s:%s Skip ALT (not ACTG)", record[chromIdx], record[posIdx])
-		return
-	}
-
-	var homs []string
-	var hets []string
-	var missing []string
-
-	siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], record[altIdx], record[posIdx], false)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if pos == "" {
-		log.Printf("%s:%s Skip ALT (complex)", record[chromIdx], record[posIdx])
-		return
-	}
-
-	// If no sampels are provided, annotate what we can, skipping hets and homs
-	if len(header) > 9 {
-		homs, hets, missing = makeHetHomozygotes(record, header, "1")
-
-		if len(homs) == 0 && len(hets) == 0 {
-			return
-		}
-	}
-
-	var output bytes.Buffer
-	output.WriteString(record[chromIdx])
-	output.WriteString("\t")
-	output.WriteString(pos)
-	output.WriteString("\t")
-	output.WriteString(siteType)
-	output.WriteString("\t")
-	output.WriteString(ref)
-	output.WriteString("\t")
-	output.WriteString(alt)
-	output.WriteString("\t")
-
-	if len(hets) == 0 {
-		output.WriteString(emptyField)
-	} else {
-		output.WriteString(strings.Join(hets, fieldDelimiter))
-	}
-
-	output.WriteString("\t")
-
-	if len(homs) == 0 {
-		output.WriteString(emptyField)
-	} else {
-		output.WriteString(strings.Join(homs, fieldDelimiter))
-	}
-
-	output.WriteString("\t")
-
-	if len(missing) == 0 {
-		output.WriteString(emptyField)
-	} else {
-		output.WriteString(strings.Join(missing, fieldDelimiter))
-	}
-
-	if keepId == true {
-		output.WriteString("\t")
-		output.WriteString(record[idIdx])
-	}
-
-	if keepInfo == true {
-		// Write the index of the allele, to allow users to segregate data in the INFO field
-		// Of course in singl allele case, index is 0 (index is relative to alt alleles, not ref + alt)
-		output.WriteString("\t")
-		output.WriteString("0")
-		output.WriteString("\t")
-		// INFO index is 7
-		output.WriteString(record[infoIdx])
-	}
-
-	output.WriteString("\n")
-	results <- output.String()
 }
 
 func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) (string, string, string, string, error) {
