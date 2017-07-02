@@ -261,16 +261,6 @@ func findEndOfLineChar (r *bufio.Reader, s string) (byte, int, string, error) {
   return findEndOfLineChar(r, s)
 }
 
-func chrToUCSC(chr string) string {
-  if len(chr) < 4 || chr[0:2] != "ch" {
-    var buff bytes.Buffer
-    buff.WriteString("chr")
-    buff.WriteString(chr)
-    return buff.String()
-  }
-  return chr
-
-}
 func linePasses(record []string, header []string, filterKeys map[string]bool) bool {
   return len(record) == len(header) && len(filterKeys) == 0 || filterKeys[record[filterIdx]] == true
 }
@@ -342,6 +332,9 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       }
 
       var output bytes.Buffer
+      if len(record[chromIdx]) < 4 || record[chromIdx][0:2] != "ch" {
+        output.WriteString("chr")
+      }
       output.WriteString(record[chromIdx])
       output.WriteString("\t")
       output.WriteString(pos)

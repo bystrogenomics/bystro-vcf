@@ -542,6 +542,10 @@ func TestOutputsInfo(t *testing.T) {
 	readVcf(&config, reader, func(row string) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+  	
   	if len(resultRow) == 10 {
   		t.Log("OK: With keepInfo flag set, but not keepId, should output 10 fields")
   	} else {
@@ -565,6 +569,10 @@ func TestOutputsInfo(t *testing.T) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
+  	
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
 
   	if len(resultRow) == 10 {
   		t.Log("OK: With keepInfo flag set, but not keepId, should output 10 fields")
@@ -604,6 +612,10 @@ func TestOutputsId(t *testing.T) {
   readVcf(&config, reader, func(row string) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
   	if len(resultRow) == 9 {
   		t.Log("OK: With keepId flag set, but not keepInfo, should output 9 fields")
   	} else {
@@ -627,6 +639,10 @@ func TestOutputsId(t *testing.T) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
 
   	if len(resultRow) == 9 {
   		t.Log("OK: With keepId flag set, but not keepInfo, should output 9 fields")
@@ -662,6 +678,10 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   readVcf(&config, reader, func(row string) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
   	
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
   	if len(resultRow) == 11 {
   		t.Log("OK: With both keepId and ratinInfo flags set, should output 11 fields")
   	} else {
@@ -710,6 +730,10 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   	index++
  
   	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
 
   	if len(resultRow) == 11 {
   		t.Log("OK: With both keepId and ratinInfo flags set, should output 11 fields")
@@ -768,6 +792,10 @@ func TestOutputMultiallelic(t *testing.T) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr20" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
 
   	if index == 0 {
   		if resultRow[altIdx] == "-4" && resultRow[posIdx] == "5" && resultRow[refIdx] == "C" {
@@ -852,6 +880,10 @@ func TestOutputComplexMultiDel(t *testing.T) {
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
+  	if resultRow[0] != "chr16" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
   	if index == 0 {
   		if resultRow[refIdx] == "A" && resultRow[posIdx] == strconv.Itoa(84034434 + 1) && resultRow[altIdx] == "-18" {
   			t.Log("OK: 18 base deletion recapitulated", resultRow)
@@ -899,6 +931,10 @@ func TestOutputComplexDel(t *testing.T) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr1" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
 
   	fmt.Println(index, resultRow)
   	if index == 0 {
