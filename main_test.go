@@ -3,9 +3,9 @@ package main
 import (
 	"strings"
 	"testing"
-	"sync"
 	"strconv"
 	"fmt"
+	"bufio"
 )
 
 func TestKeepFlagsTrue(t *testing.T) {
@@ -530,32 +530,22 @@ func TestNomralizeSampleNames(t *testing.T) {
 }
 
 func TestOutputsInfo(t *testing.T) {
-	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}
-	record := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT"}
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}, "\t")
+	record := strings.Join([]string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT"}, "\t")
 
-	emptyField := "!"
-	fieldDelimiter := ";"
-	retainId := false;
-	retainInfo := true;
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
 
-	c := make(chan string)
-	// I think we need a wait group, not sure.
-	wg := new(sync.WaitGroup)
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepId: false, keepInfo: true}
 
-	go func(){
-		wg.Add(1)
-		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
-		wg.Wait();
-		close(c)
-	}()
-
-  for row := range c {
+	readVcf(&config, reader, func(row string) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if len(resultRow) == 10 {
-  		t.Log("OK: With retainInfo flag set, but not retainID, should output 10 fields")
+  		t.Log("OK: With keepInfo flag set, but not keepId, should output 10 fields")
   	} else {
-  		t.Error("NOT OK: With retainInfo flag set, but not retainID, should output 8 fields")
+  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 8 fields")
   	}
   	
 		if resultRow[8] == "0" && resultRow[9] == "AC=1" {
@@ -563,29 +553,23 @@ func TestOutputsInfo(t *testing.T) {
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
 		}
-	}
+	})
 
-	record = []string{"10", "1000", "rs#", "C", "T,G", "100", "PASS", "AC=1", "GT"}
+	record = strings.Join([]string{"10", "1000", "rs#", "C", "T,G", "100", "PASS", "AC=1", "GT"}, "\t")
 
-	c = make(chan string)
-
-	go func(){
-		wg.Add(1)
-		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
-		wg.Wait();
-		close(c)
-	}()
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader = bufio.NewReader(strings.NewReader(lines))
 
 	index := -1;
-  for row := range c {
+  readVcf(&config, reader, func(row string) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if len(resultRow) == 10 {
-  		t.Log("OK: With retainInfo flag set, but not retainID, should output 10 fields")
+  		t.Log("OK: With keepInfo flag set, but not keepId, should output 10 fields")
   	} else {
-  		t.Error("NOT OK: With retainInfo flag set, but not retainID, should output 10 fields")
+  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 10 fields")
   	}
 
   	altIdx, err := strconv.Atoi(resultRow[8])
@@ -599,7 +583,7 @@ func TestOutputsInfo(t *testing.T) {
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
 		}
-	}
+	})
 
 	if index != 1 {
 		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
@@ -607,32 +591,23 @@ func TestOutputsInfo(t *testing.T) {
 }
 
 func TestOutputsId(t *testing.T) {
-	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}
-	record := []string{"10", "1000", "rs123", "C", "T", "100", "PASS", "AC=1", "GT"}
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"}, "\t")
+	record := strings.Join([]string{"10", "1000", "rs123", "C", "T", "100", "PASS", "AC=1", "GT"}, "\t")
 
-	emptyField := "!"
-	fieldDelimiter := ";"
-	retainId := true;
-	retainInfo := false;
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
 
-	c := make(chan string)
-	// I think we need a wait group, not sure.
-	wg := new(sync.WaitGroup)
+	reader := bufio.NewReader(strings.NewReader(lines))
 
-	go func(){
-		wg.Add(1)
-		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
-		wg.Wait();
-		close(c)
-	}()
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepId: true, keepInfo: false}
 
-  for row := range c {
+  readVcf(&config, reader, func(row string) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if len(resultRow) == 9 {
-  		t.Log("OK: With retainID flag set, but not retainInfo, should output 9 fields")
+  		t.Log("OK: With keepId flag set, but not keepInfo, should output 9 fields")
   	} else {
-  		t.Error("NOT OK: With retainID flag set, but not retainInfo, should output 9 fields")
+  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 9 fields")
   	}
 
 		if resultRow[8] == "rs123" {
@@ -640,29 +615,23 @@ func TestOutputsId(t *testing.T) {
 		} else {
 			t.Error("NOT OK: Couldn't add ID field", resultRow)
 		}
-	}
+	})
 
-	record = []string{"10", "1000", "rs456", "C", "T,G", "100", "PASS", "AC=1", "GT"}
+	record = strings.Join([]string{"10", "1000", "rs456", "C", "T,G", "100", "PASS", "AC=1", "GT"}, "\t")
 
-	c = make(chan string)
-
-	go func(){
-		wg.Add(1)
-		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
-		wg.Wait();
-		close(c)
-	}()
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader = bufio.NewReader(strings.NewReader(lines))
 
 	index := -1
-  for row := range c {
+  readVcf(&config, reader, func(row string) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if len(resultRow) == 9 {
-  		t.Log("OK: With retainID flag set, but not retainInfo, should output 9 fields")
+  		t.Log("OK: With keepId flag set, but not keepInfo, should output 9 fields")
   	} else {
-  		t.Error("NOT OK: With retainID flag set, but not retainInfo, should output 9 fields")
+  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 9 fields")
   	}
 
   	if resultRow[8] == "rs456" {
@@ -670,7 +639,7 @@ func TestOutputsId(t *testing.T) {
 		} else {
 			t.Error("NOT OK: Couldn't add ID field", resultRow)
 		}
-	}
+	})
 
 	if index != 1 {
 		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
@@ -678,32 +647,25 @@ func TestOutputsId(t *testing.T) {
 }
 
 func TestOutputsSamplesIdAndInfo(t *testing.T) {
-	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4"}
-	record := []string{"10", "1000", "rs123", "C", "T", "100", "PASS", "AC=1", "GT", "0/0", "0/1", "1/1", "./."}
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4"}, "\t")
+	record := strings.Join([]string{"10", "1000", "rs123", "C", "T", "100", "PASS",
+		"AC=1", "GT", "0/0", "0/1", "1/1", "./."}, "\t")
 
-	emptyField := "!"
-	fieldDelimiter := ";"
-	retainId := true;
-	retainInfo := true;
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
 
-	c := make(chan string)
-	// I think we need a wait group, not sure.
-	wg := new(sync.WaitGroup)
+	reader := bufio.NewReader(strings.NewReader(lines))
 
-	go func(){
-		wg.Add(1)
-		processSingleLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
-		wg.Wait();
-		close(c)
-	}()
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepId: true, keepInfo: true}
 
-  for row := range c {
+  readVcf(&config, reader, func(row string) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
   	
   	if len(resultRow) == 11 {
-  		t.Log("OK: With both retainID and ratinInfo flags set, should output 11 fields")
+  		t.Log("OK: With both keepId and ratinInfo flags set, should output 11 fields")
   	} else {
-  		t.Error("NOT OK: With both retainID and ratinInfo flags set, should output 11 fields")
+  		t.Error("NOT OK: With both keepId and ratinInfo flags set, should output 11 fields")
   	}
 
 		if resultRow[8] == "rs123" {
@@ -735,29 +697,24 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the missing sample", resultRow)
 		}
-	}
+	})
 
-	record = []string{"10", "1000", "rs456", "C", "T,G", "100", "PASS", "AC=1", "GT", "1|1", "0|0", "0|2", ".|."}
+	record = strings.Join([]string{"10", "1000", "rs456", "C", "T,G", "100", "PASS",
+		"AC=1", "GT", "1|1", "0|0", "0|2", ".|."}, "\t")
 
-	c = make(chan string)
-
-	go func(){
-		wg.Add(1)
-		processMultiLine(record, header, emptyField, fieldDelimiter, retainId, retainInfo, c, wg)
-		wg.Wait();
-		close(c)
-	}()
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader = bufio.NewReader(strings.NewReader(lines))
 
 	index := -1
-  for row := range c {
+  readVcf(&config, reader, func(row string) {
   	index++
  
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if len(resultRow) == 11 {
-  		t.Log("OK: With both retainID and ratinInfo flags set, should output 11 fields")
+  		t.Log("OK: With both keepId and ratinInfo flags set, should output 11 fields")
   	} else {
-  		t.Error("With both retainID and ratinInfo flags set, should output 11 fields")
+  		t.Error("With both keepId and ratinInfo flags set, should output 11 fields")
   	}
 
   	if resultRow[8] == "rs456" {
@@ -773,9 +730,9 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   	}
 
   	if altIdx == index {
-  		t.Log("OK: Multiallelic index is in 10th column when retainInfo is true")
+  		t.Log("OK: Multiallelic index is in 10th column when keepInfo is true")
 		} else {
-			t.Error("NOT OK: Multiallelic index isn't in 10th column when retainInfo is true", resultRow)
+			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
 		}
 
 		if resultRow[10] == "AC=1" {
@@ -783,7 +740,7 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
 		}
-	}
+	})
 
 	if index != 1 {
 		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
@@ -791,33 +748,23 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 }
 
 func TestOutputMultiallelic(t *testing.T) {
-	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "Format", "Sample1", "Sample2", "Sample3", "Sample4"}
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO",
+	"Format", "Sample1", "Sample2", "Sample3", "Sample4"}, "\t")
 	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
 	//Except use A as last base, to properly distinguish first and last base of reference
-	record := []string{"20", "4", ".", "GCACG", "G,GTCACACG", ".", "PASS", "DP=100", "GT", "0|0", "0|1", "2|2", ".|."}
+	record := strings.Join([]string{"20", "4", ".", "GCACG", "G,GTCACACG", ".", "PASS", "DP=100",
+	"GT", "0|0", "0|1", "2|2", ".|."}, "\t")
 
 	keepFiltered := map[string]bool{ "PASS": true, ".": true}
 
-	emptyField := "!"
-	fieldDelimiter := ";"
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
 
-	c := make(chan string)
-	// I think we need a wait group, not sure.
-	wg := new(sync.WaitGroup)
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepFiltered: keepFiltered}
 
-	go func(){
-		if linePasses(record, header, keepFiltered) == false {
-			t.Error("NOT OK: Line should pass", record, header)
-		}
-
-		wg.Add(1)
-		go processLine(record, header, emptyField, fieldDelimiter, false, false, c, wg)
-		wg.Wait();
-		close(c)
-	}()
-
-	index := -1;
-  for row := range c {
+	index := -1
+  readVcf(&config, reader, func(row string) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
@@ -835,7 +782,7 @@ func TestOutputMultiallelic(t *testing.T) {
   			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
   		}
 
-  		if resultRow[6] == emptyField {
+  		if resultRow[6] == config.emptyField {
 				t.Log("OK: Recapitualte 1st allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
@@ -855,7 +802,7 @@ func TestOutputMultiallelic(t *testing.T) {
   			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
   		}
 
-  		if resultRow[5] == emptyField {
+  		if resultRow[5] == config.emptyField {
 				t.Log("OK: Recapitualte 2nd allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 2nd allele het", resultRow)
@@ -873,7 +820,7 @@ func TestOutputMultiallelic(t *testing.T) {
   			t.Error("NOT OK: Couldn't recapitualte 2nd allele het", resultRow)
   		}
 		}
-	}
+	})
 
 	if index == 1 {
 		t.Log("OK: parsed 2 alleles")
@@ -883,33 +830,24 @@ func TestOutputMultiallelic(t *testing.T) {
 }
 
 func TestOutputComplexMultiDel(t *testing.T) {
-	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO"}, "\t")
 	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
 	//Test from gnomad genomes
-	record := []string{"16", "84034434", "rs141446650", "GAGGGAGACAGAGGGAAGT", "G,GGGGAGACAGAGGGAAGT", ".", "PASS", "DP=100"}
+	record := strings.Join([]string{"16", "84034434", "rs141446650", "GAGGGAGACAGAGGGAAGT",
+		"G,GGGGAGACAGAGGGAAGT", ".", "PASS", "DP=100"}, "\t")
 
 	keepFiltered := map[string]bool{ "PASS": true, ".": true}
 
-	emptyField := "!"
-	fieldDelimiter := ";"
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
 
-	c := make(chan string)
-	// I think we need a wait group, not sure.
-	wg := new(sync.WaitGroup)
-
-	go func(){
-		if linePasses(record, header, keepFiltered) == false {
-			t.Error("NOT OK: Line should pass", record, header)
-		}
-
-		wg.Add(1)
-		go processLine(record, header, emptyField, fieldDelimiter, false, false, c, wg)
-		wg.Wait();
-		close(c)
-	}()
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepFiltered: keepFiltered}
 
 	index := -1;
-  for row := range c {
+
+	readVcf(&config, reader, func(row string) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
@@ -929,7 +867,7 @@ func TestOutputComplexMultiDel(t *testing.T) {
   			t.Error("NOT OK: 1 base deletion not recapitulated", resultRow)
   		}
 		}
-	}
+	})
 
 	if index == 1 {
 		t.Log("OK: parsed 2 alleles")
@@ -939,33 +877,25 @@ func TestOutputComplexMultiDel(t *testing.T) {
 }
 
 func TestOutputComplexDel(t *testing.T) {
-	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO"}, "\t")
 	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
 	//Test from gnomad genomes
-	record := []string{"1", "874816", "rs200996316", "CCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT", "CCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,GCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,C,CTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT", ".", "PASS", "DP=100"}
+	record := strings.Join([]string{"1", "874816", "rs200996316",
+		"CCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT",
+		"CCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,GCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,C,CTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT",
+		".", "PASS", "DP=100"}, "\t")
 
 	keepFiltered := map[string]bool{ "PASS": true, ".": true}
 
-	emptyField := "!"
-	fieldDelimiter := ";"
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
 
-	c := make(chan string)
-	// I think we need a wait group, not sure.
-	wg := new(sync.WaitGroup)
-
-	go func(){
-		if linePasses(record, header,keepFiltered) == false {
-			t.Error("NOT OK: Line should pass", record, header)
-		}
-
-		wg.Add(1)
-		go processLine(record, header, emptyField, fieldDelimiter, false, false, c, wg)
-		wg.Wait();
-		close(c)
-	}()
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepFiltered: keepFiltered}
 
 	index := -1;
-  for row := range c {
+  readVcf(&config, reader, func(row string) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
@@ -1002,7 +932,7 @@ func TestOutputComplexDel(t *testing.T) {
   			t.Error("NOT OK: Intercolated insertion +T not recapitulated", resultRow)
   		}
 		}
-	}
+	})
 
 	if index == 3 {
 		t.Log("Ok, recapitulated 4 alleles")
