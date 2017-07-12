@@ -310,7 +310,12 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       output.WriteString("\t")
       output.WriteString(pos)
       output.WriteString("\t")
-      output.WriteString(siteType)
+      if multiallelic {
+        output.WriteString("MULTIALLELIC")
+      } else {
+        output.WriteString(siteType)
+      }
+
       output.WriteString("\t")
       output.WriteString(ref)
       output.WriteString("\t")
@@ -320,7 +325,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       if(multiallelic) {
         output.WriteRune('0')
       } else {
-        output.WriteRune(parse.TrTv(record[refIdx], alt))
+        output.WriteRune(parse.TrTv(ref, alt))
       }
 
       output.WriteString("\t")
