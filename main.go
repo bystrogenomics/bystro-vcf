@@ -13,6 +13,7 @@ import (
   "sync"
   "regexp"
   "runtime/pprof"
+  "github.com/akotlar/sequtils/parse"
 )
 
 const concurrency int = 8
@@ -126,7 +127,7 @@ func readVcf (config *Config, reader *bufio.Reader, resultFunc func(row string))
   results := make(chan string, 100)
   var wg sync.WaitGroup
 
-  endOfLineByte, numChars, versionLine, err := findEndOfLineChar(reader, "")
+  endOfLineByte, numChars, versionLine, err := parse.FindEndOfLine(reader, "")
 
   if err != nil {
     log.Fatal(err)
@@ -177,7 +178,7 @@ func readVcf (config *Config, reader *bufio.Reader, resultFunc func(row string))
   }
 
   // Remove periods from sample names
-  normalizeSampleNames(header)
+  parse.NormalizeHeader(header)
 
   // Read the lines into the work queue.
   go func() {
@@ -225,42 +226,6 @@ func readVcf (config *Config, reader *bufio.Reader, resultFunc func(row string))
   wg.Wait()
 }
 
-func findEndOfLineChar (r *bufio.Reader, s string) (byte, int, string, error) {
-  runeChar, _, err := r.ReadRune()
-
-  if err != nil {
-    return byte(0), 0, "", err
-  }
-
-  if runeChar == '\r' {
-    nextByte, err := r.Peek(1)
-
-    if err != nil {
-      return byte(0), 0, "", err
-    }
-
-    if rune(nextByte[0]) == '\n' {
-      //Remove the line feed
-      _, _, err = r.ReadRune()
-
-      if err != nil {
-        return byte(0), 0, "", err
-      }
-
-      return nextByte[0], 2, s, nil
-    }
-
-    return byte('\r'), 1, s, nil
-  }
-
-  if runeChar == '\n' {
-    return byte('\n'), 1, s, nil
-  }
-
-  s += string(runeChar)
-  return findEndOfLineChar(r, s)
-}
-
 func linePasses(record []string, header []string, filterKeys map[string]bool) bool {
   return len(record) == len(header) && len(filterKeys) == 0 || filterKeys[record[filterIdx]] == true
 }
@@ -295,6 +260,9 @@ func altIsValid(alt string) bool {
 
 func processLines(header []string, emptyField string, fieldDelimiter string, keepId bool, keepInfo bool,
 keepFiltered map[string]bool, queue chan string, results chan string, complete chan bool) {
+  var alleles []string
+  var multiallelic bool
+
   for line := range queue {
     record := strings.Split(line, "\t")
     
@@ -306,13 +274,16 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
     var hets []string
     var missing []string
 
-    for idx, allele := range strings.Split(record[altIdx], ",") {
+    alleles = strings.Split(record[altIdx], ",")
+    multiallelic = len(alleles) > 1
+
+    for idx, allele := range alleles {
       if altIsValid(allele) == false {
         log.Printf("%s:%s Skip ALT #%d (not ACTG)", record[chromIdx], record[posIdx], idx+1)
         continue
       }
 
-      siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx], true)
+      siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx], multiallelic)
       if err != nil {
         log.Fatal(err)
       }
@@ -344,6 +315,14 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       output.WriteString(ref)
       output.WriteString("\t")
       output.WriteString(alt)
+      output.WriteString("\t")
+
+      if(multiallelic) {
+        output.WriteRune('0')
+      } else {
+        output.WriteRune(parse.TrTv(record[refIdx], alt))
+      }
+
       output.WriteString("\t")
 
       if len(hets) == 0 {
@@ -570,12 +549,4 @@ func makeHetHomozygotes(fields []string, header []string, alleleIdx string) ([]s
     }
 
   return homs, hets, missing
-}
-
-func normalizeSampleNames(header []string) {
-  re := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
-
-  for i := 9; i < len(header); i++ {
-    header[i] = re.ReplaceAllString(header[i], "_")
-  }
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"fmt"
 	"bufio"
+	"github.com/akotlar/sequtils/parse"
 )
 
 func TestKeepFlagsTrue(t *testing.T) {
@@ -494,7 +495,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 func TestNomralizeSampleNames(t *testing.T) {
 	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1.HAHAHAH", "S2.TRYINGTO.MESSYOUUP", "S3", "S-4"}
 
-	normalizeSampleNames(header)
+	parse.NormalizeHeader(header)
 
 	for i := 9; i < len(header); i++ {
 		if strings.Contains(header[i], ".") {
@@ -546,13 +547,13 @@ func TestOutputsInfo(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
   	
-  	if len(resultRow) == 10 {
-  		t.Log("OK: With keepInfo flag set, but not keepId, should output 10 fields")
+  	if len(resultRow) == 11 {
+  		t.Log("OK: With keepInfo flag set, but not keepId, should output 11 fields")
   	} else {
-  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 8 fields")
+  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 11 fields", resultRow)
   	}
   	
-		if resultRow[8] == "0" && resultRow[9] == "AC=1" {
+		if resultRow[len(resultRow) - 2] == "0" && resultRow[len(resultRow) - 1] == "AC=1" {
 			t.Log("OK: add INFO field correctly for single field")
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
@@ -574,19 +575,19 @@ func TestOutputsInfo(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 10 {
-  		t.Log("OK: With keepInfo flag set, but not keepId, should output 10 fields")
+  	if len(resultRow) == 11 {
+  		t.Log("OK: With keepInfo flag set, but not keepId, should output 11 fields")
   	} else {
-  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 10 fields")
+  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 11 fields", resultRow)
   	}
 
-  	altIdx, err := strconv.Atoi(resultRow[8])
+  	altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
 
   	if err != nil {
   		t.Error("NOT OK: The 8th column should be numeric")
   	}
 
-  	if altIdx == index && resultRow[9] == "AC=1" {
+  	if altIdx == index && resultRow[len(resultRow) - 1] == "AC=1" {
 			t.Log("OK: add INFO field correctly for multiple field, index", altIdx)
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
@@ -616,13 +617,13 @@ func TestOutputsId(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 9 {
-  		t.Log("OK: With keepId flag set, but not keepInfo, should output 9 fields")
+  	if len(resultRow) == 10 {
+  		t.Log("OK: With keepId flag set, but not keepInfo, should output 10 fields")
   	} else {
-  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 9 fields")
+  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 10 fields", resultRow)
   	}
 
-		if resultRow[8] == "rs123" {
+		if resultRow[len(resultRow) - 1] == "rs123" {
 			t.Log("OK: add ID field correctly for single field")
 		} else {
 			t.Error("NOT OK: Couldn't add ID field", resultRow)
@@ -644,13 +645,13 @@ func TestOutputsId(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 9 {
-  		t.Log("OK: With keepId flag set, but not keepInfo, should output 9 fields")
+  	if len(resultRow) == 10 {
+  		t.Log("OK: With keepId flag set, but not keepInfo, should output 10 fields")
   	} else {
-  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 9 fields")
+  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 10 fields", resultRow)
   	}
 
-  	if resultRow[8] == "rs456" {
+  	if resultRow[len(resultRow) - 1] == "rs456" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
 		} else {
 			t.Error("NOT OK: Couldn't add ID field", resultRow)
@@ -682,37 +683,37 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 11 {
-  		t.Log("OK: With both keepId and ratinInfo flags set, should output 11 fields")
+  	if len(resultRow) == 12 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 12 fields")
   	} else {
-  		t.Error("NOT OK: With both keepId and ratinInfo flags set, should output 11 fields")
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 12 fields", resultRow)
   	}
 
-		if resultRow[8] == "rs123" {
+		if resultRow[len(resultRow) - 3] == "rs123" {
 			t.Log("OK: add ID field correctly for single field")
 		} else {
 			t.Error("NOT OK: Couldn't add ID field", resultRow)
 		}
 
-		if resultRow[9] == "0" && resultRow[10] == "AC=1" {
+		if resultRow[len(resultRow) - 2] == "0" && resultRow[len(resultRow) - 1] == "AC=1" {
 			t.Log("OK: add INFO field correctly for single field")
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
 		}
 
-		if resultRow[5] == "Sample2" {
+		if resultRow[6] == "Sample2" {
 			t.Log("OK: Recapitualte the het", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the het", resultRow)
 		}
 
-		if resultRow[6] == "Sample3" {
+		if resultRow[7] == "Sample3" {
 			t.Log("OK: Recapitualte the homozygote", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the homozygote", resultRow)
 		}
 
-		if resultRow[7] == "Sample4" {
+		if resultRow[8] == "Sample4" {
 			t.Log("OK: Recapitualte the missing sample", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the missing sample", resultRow)
@@ -735,19 +736,19 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 11 {
-  		t.Log("OK: With both keepId and ratinInfo flags set, should output 11 fields")
+  	if len(resultRow) == 12 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 12 fields")
   	} else {
-  		t.Error("With both keepId and ratinInfo flags set, should output 11 fields")
+  		t.Error("With both keepId and retainInfo flags set, should output 12 fields", resultRow)
   	}
 
-  	if resultRow[8] == "rs456" {
+  	if resultRow[len(resultRow) - 3] == "rs456" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
 		} else {
-			t.Error("NOT OK: Couldn't add ID field", altIdx, record[8])
+			t.Error("NOT OK: Couldn't add ID field", altIdx, resultRow)
 		}
 
-		altIdx, err := strconv.Atoi(resultRow[9])
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
 
   	if err != nil {
   		t.Error("NOT OK: The 9th column should be numeric")
@@ -759,7 +760,7 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
 		}
 
-		if resultRow[10] == "AC=1" {
+		if resultRow[len(resultRow) - 1] == "AC=1" {
 			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
@@ -804,19 +805,19 @@ func TestOutputMultiallelic(t *testing.T) {
   			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
   		}
 			
-			if resultRow[5] == "Sample2" {
+			if resultRow[6] == "Sample2" {
 				t.Log("OK: Recapitualte 1st allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
   		}
 
-  		if resultRow[6] == config.emptyField {
+  		if resultRow[7] == config.emptyField {
 				t.Log("OK: Recapitualte 1st allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
   		}
 
-  		if resultRow[7] == "Sample4" {
+  		if resultRow[8] == "Sample4" {
 				t.Log("OK: Recapitualte 1st allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
@@ -830,19 +831,19 @@ func TestOutputMultiallelic(t *testing.T) {
   			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
   		}
 
-  		if resultRow[5] == config.emptyField {
+  		if resultRow[6] == config.emptyField {
 				t.Log("OK: Recapitualte 2nd allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 2nd allele het", resultRow)
   		}
 
-  		if resultRow[6] == "Sample3" {
+  		if resultRow[7] == "Sample3" {
 				t.Log("OK: Recapitualte 2nd allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 2nd allele hom", resultRow)
   		}
 
-  		if resultRow[7] == "Sample4" {
+  		if resultRow[8] == "Sample4" {
 				t.Log("OK: Recapitualte 2nd allele het", resultRow)
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 2nd allele het", resultRow)
