@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"fmt"
 	"bufio"
-	"github.com/akotlar/sequtils/parse"
 )
 
 func TestKeepFlagsTrue(t *testing.T) {
@@ -492,43 +491,6 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	}
 }
 
-func TestNomralizeSampleNames(t *testing.T) {
-	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1.HAHAHAH", "S2.TRYINGTO.MESSYOUUP", "S3", "S-4"}
-
-	parse.NormalizeHeader(header)
-
-	for i := 9; i < len(header); i++ {
-		if strings.Contains(header[i], ".") {
-			t.Error("NOT OK: Couldn't replace period")
-		} else {
-			t.Log("OK: no periods found in", header[i])
-		}
-	}
-
-	if header[9] == "S1_HAHAHAH" {
-		t.Log("OK: replaced period in S1.HAHAHAH", header[9])
-	} else {
-		t.Error("NOT OK: Couldn't replace period in S1.HAHAHAH", header[9])
-	}
-
-	if header[10] == "S2_TRYINGTO_MESSYOUUP" {
-		t.Log("OK: replaced two periods in S2.TRYINGTO.MESSYOUUP", header[10])
-	} else {
-		t.Error("NOT OK: Couldn't replace periods in S2.TRYINGTO.MESSYOUUP", header[10])
-	}
-
-	if header[11] == "S3" {
-		t.Log("OK: didn't mess up name S3", header[11])
-	} else {
-		t.Error("NOT OK: Messed up name S3", header[11])
-	}
-
-	if header[12] == "S-4" {
-		t.Log("OK:  didn't mess up name without a period", header[12])
-	} else {
-		t.Error("NOT OK: Messed up name S-4", header[12])
-	}
-}
 
 func TestOutputsInfo(t *testing.T) {
 	versionLine := "##fileformat=VCFv4.x"
@@ -546,7 +508,15 @@ func TestOutputsInfo(t *testing.T) {
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
-  	
+  		
+  	if resultRow[4] != "T" {
+  		t.Error("Couldn't parse T allele", resultRow)
+  	}
+
+  	if resultRow[5] != "1" {
+  		t.Error("Transitions should have value 1", resultRow)
+  	}
+
   	if len(resultRow) == 11 {
   		t.Log("OK: With keepInfo flag set, but not keepId, should output 11 fields")
   	} else {
@@ -573,6 +543,10 @@ func TestOutputsInfo(t *testing.T) {
   	
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if resultRow[5] != "0" {
+  		t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
   	}
 
   	if len(resultRow) == 11 {
@@ -617,6 +591,12 @@ func TestOutputsId(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
+  	if resultRow[5] != "1" {
+  		t.Error("Transitions should have value 1", resultRow)
+  	} else {
+  		t.Log("Parsed transition with value 1", resultRow)
+  	}
+
   	if len(resultRow) == 10 {
   		t.Log("OK: With keepId flag set, but not keepInfo, should output 10 fields")
   	} else {
@@ -645,6 +625,10 @@ func TestOutputsId(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
+  	if resultRow[5] != "0" {
+  		t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
+  	}
+
   	if len(resultRow) == 10 {
   		t.Log("OK: With keepId flag set, but not keepInfo, should output 10 fields")
   	} else {
@@ -667,7 +651,7 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
 		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4"}, "\t")
-	record := strings.Join([]string{"10", "1000", "rs123", "C", "T", "100", "PASS",
+	record := strings.Join([]string{"10", "1000", "rs123", "A", "T", "100", "PASS",
 		"AC=1", "GT", "0/0", "0/1", "1/1", "./."}, "\t")
 
 	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
@@ -681,6 +665,12 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   	
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if resultRow[5] != "2" {
+  		t.Error("Transversions should have value 2", resultRow)
+  	} else {
+  		t.Log("Parsed transversion with value 2", resultRow)
   	}
 
   	if len(resultRow) == 12 {
@@ -796,6 +786,10 @@ func TestOutputMultiallelic(t *testing.T) {
 
   	if resultRow[0] != "chr20" {
   		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if resultRow[5] != "0" {
+  		t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
   	}
 
   	if index == 0 {
