@@ -13,7 +13,7 @@ import (
   "sync"
   "regexp"
   "runtime/pprof"
-  "github.com/akotlar/sequtils/parse"
+  "github.com/akotlar/bystro-utils/parse"
 )
 
 const concurrency int = 8
