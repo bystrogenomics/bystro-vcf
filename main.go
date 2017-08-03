@@ -322,11 +322,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       output.WriteString(alt)
       output.WriteString("\t")
 
-      if(multiallelic) {
-        output.WriteRune('0')
-      } else {
-        output.WriteRune(parse.TrTv(ref, alt))
-      }
+      output.WriteRune(parse.GetTrTv(ref, alt, multiallelic))
 
       output.WriteString("\t")
 
