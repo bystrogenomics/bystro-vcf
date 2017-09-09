@@ -579,10 +579,10 @@ func TestOutputsInfo(t *testing.T) {
   		t.Error("Transitions should have value 1", resultRow)
   	}
 
-  	if len(resultRow) != 13 {
-  		t.Log("OK: With keepInfo flag set, but not keepId, should output 13 fields")
+  	if len(resultRow) == 15 {
+  		t.Log("OK: With keepInfo flag set, but not keepId, should output 15 fields", resultRow)
   	} else {
-  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 13 fields", resultRow)
+  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 15 fields", resultRow)
   	}
   	
 		if resultRow[len(resultRow) - 2] == "0" && resultRow[len(resultRow) - 1] == "AC=1" {
@@ -611,10 +611,10 @@ func TestOutputsInfo(t *testing.T) {
   		t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
   	}
 
-  	if len(resultRow) == 12 {
-  		t.Log("OK: With keepInfo flag set, but not keepId, should output 12 fields")
+  	if len(resultRow) == 15 {
+  		t.Log("OK: With keepInfo flag set, but not keepId, should output 15 fields", resultRow)
   	} else {
-  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 12 fields", resultRow)
+  		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 15 fields", resultRow)
   	}
 
   	altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
@@ -659,10 +659,10 @@ func TestOutputsId(t *testing.T) {
   		t.Log("Parsed transition with value 1", resultRow)
   	}
 
-  	if len(resultRow) == 11 {
-  		t.Log("OK: With keepId flag set, but not keepInfo, should output 11 fields")
+  	if len(resultRow) == 14 {
+  		t.Log("OK: With keepId flag set, but not keepInfo, should output 14 fields")
   	} else {
-  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 11 fields", resultRow)
+  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 14 fields", resultRow)
   	}
 
 		if resultRow[len(resultRow) - 1] == "rs123" {
@@ -691,10 +691,10 @@ func TestOutputsId(t *testing.T) {
   		t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
   	}
 
-  	if len(resultRow) == 11 {
-  		t.Log("OK: With keepId flag set, but not keepInfo, should output 11 fields")
+  	if len(resultRow) == 14 {
+  		t.Log("OK: With keepId flag set, but not keepInfo, should output 14 fields")
   	} else {
-  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 11 fields", resultRow)
+  		t.Error("NOT OK: With keepId flag set, but not keepInfo, should output 14 fields", resultRow)
   	}
 
   	if resultRow[len(resultRow) - 1] == "rs456" {
@@ -735,10 +735,10 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   		t.Log("Parsed transversion with value 2", resultRow)
   	}
 
-  	if len(resultRow) == 13 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 13 fields")
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
   	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 13 fields", resultRow)
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
   	}
 
 		if resultRow[len(resultRow) - 3] == "rs123" {
@@ -759,13 +759,13 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 			t.Error("NOT OK: Couldn't recapitualte the het", resultRow)
 		}
 
-		if resultRow[7] == "Sample3" {
+		if resultRow[8] == "Sample3" {
 			t.Log("OK: Recapitualte the homozygote", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the homozygote", resultRow)
 		}
 
-		if resultRow[8] == "Sample4" {
+		if resultRow[10] == "Sample4" {
 			t.Log("OK: Recapitualte the missing sample", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the missing sample", resultRow)
@@ -788,10 +788,10 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 13 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 13 fields")
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
   	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 13 fields", resultRow)
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
   	}
 
   	if resultRow[len(resultRow) - 3] == "rs456" {
@@ -867,16 +867,16 @@ func TestOutputMultiallelic(t *testing.T) {
   			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
   		}
 
-  		if resultRow[7] == config.emptyField {
-				t.Log("OK: Recapitualte 1st allele het", resultRow)
+  		if resultRow[8] == config.emptyField {
+				t.Log("OK: Recapitualte 1st allele has no hets", resultRow)
   		} else {
-  			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
+  			t.Error("NOT OK: Couldn't recapitualte 1st allele has no hets", resultRow)
   		}
 
-  		if resultRow[8] == "Sample4" {
-				t.Log("OK: Recapitualte 1st allele het", resultRow)
+  		if resultRow[10] == "Sample4" {
+				t.Log("OK: Recapitualte 1st allele missing for Sample4", resultRow)
   		} else {
-  			t.Error("NOT OK: Couldn't recapitualte 1st allele het", resultRow)
+  			t.Error("NOT OK: Couldn't recapitualte 1st allele missing for Sample4", resultRow)
   		}
 		}
 
@@ -893,16 +893,16 @@ func TestOutputMultiallelic(t *testing.T) {
   			t.Error("NOT OK: Couldn't recapitualte 2nd allele het", resultRow)
   		}
 
-  		if resultRow[7] == "Sample3" {
-				t.Log("OK: Recapitualte 2nd allele het", resultRow)
+  		if resultRow[8] == "Sample3" {
+				t.Log("OK: Recapitualte 2nd allele has Sample3 as het", resultRow)
   		} else {
-  			t.Error("NOT OK: Couldn't recapitualte 2nd allele hom", resultRow)
+  			t.Error("NOT OK: Couldn't recapitualte 2nd allele has Sample3 as het", resultRow)
   		}
 
-  		if resultRow[8] == "Sample4" {
-				t.Log("OK: Recapitualte 2nd allele het", resultRow)
+  		if resultRow[10] == "Sample4" {
+				t.Log("OK: Recapitualte 2nd allele is missing for Sample4", resultRow)
   		} else {
-  			t.Error("NOT OK: Couldn't recapitualte 2nd allele het", resultRow)
+  			t.Error("NOT OK: Couldn't recapitualte 2nd allele missing for Sample4", resultRow)
   		}
 		}
 	})
