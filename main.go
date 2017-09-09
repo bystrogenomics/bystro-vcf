@@ -47,7 +47,7 @@ func setup(args []string) *Config {
   flag.BoolVar(&config.keepId, "keepId", false, "Retain the ID field in output")
   flag.BoolVar(&config.keepInfo, "keepInfo", false, "Retain INFO field in output (2 appended output fields: allele index and the INFO field. Will appear after id field if --keepId flag set.")
   flag.StringVar(&config.cpuProfile, "cpuProfile", "", "Write cpu profile to file at this path")
-  filteredVals := flag.String("keepFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
+  filteredVals := flag.String("allowFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
   excludeFilterVals := flag.String("excludeFilter", "", "Exclude rows that have this FILTER value (comma separated)")
   // allows args to be mocked https://github.com/nwjlyons/email/blob/master/inputs.go
   // can only run 1 such test, else, redefined flags error
@@ -112,7 +112,32 @@ func main() {
 
   reader := bufio.NewReader(inFh)
 
+  fmt.Print(stringHeader(config))
   readVcf(config, reader, func(row string) {fmt.Print(row)})
+}
+
+func stringHeader(config *Config) string {
+  var output bytes.Buffer
+
+  output.WriteString(strings.Join(header(config), "\t"))
+  output.WriteString("\n")
+
+  return output.String()
+}
+
+func header(config *Config) []string {
+  header := []string{"chrom", "pos", "siteType", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf"}
+
+  if config.keepId {
+    header = append(header, "id")
+  }
+
+  if config.keepInfo {
+    header = append(header, "alleleIdx", "info")
+  }
+
+  return header
 }
 
 func readVcf (config *Config, reader *bufio.Reader, resultFunc func(row string)) {
@@ -263,6 +288,16 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
   var alleles []string
   var multiallelic bool
 
+  var numSamples float64
+
+  if(len(header) > 9) {
+    numSamples = float64(len(header) - 9)
+  } else if(len(header) == 9) {
+    log.Printf("Found 9 header fields. When genotypes present, we expect 1+ samples after FORMAT (10 fields minimum)")
+  }
+
+  runeLookup := []rune {'1','2','3','4','5','6','7','8','9'}
+
   for line := range queue {
     record := strings.Split(line, "\t")
     
@@ -273,9 +308,16 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
     var homs []string
     var hets []string
     var missing []string
+    var sampleMaf float64
 
     alleles = strings.Split(record[altIdx], ",")
     multiallelic = len(alleles) > 1
+
+    // Currently limited to 9 alleles + 1 ref max
+    if len(alleles) > 9 {
+      log.Printf("%s:%s: We currently don't support sites with > 9 minor alleles, found %d", record[chromIdx], record[posIdx], len(alleles))
+      continue
+    }
 
     for idx, allele := range alleles {
       if altIsValid(allele) == false {
@@ -293,23 +335,29 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         continue
       }
 
-      // If no sampels are provided, annotate what we can, skipping hets and homs
-      if len(header) > 9 {
-        homs, hets, missing = makeHetHomozygotes(record, header, strconv.Itoa(idx+1))
+      // If no samples are provided, annotate what we can, skipping hets and homs
+      // If samples are provided, but only missing genotypes, skip the site altogether
+      if numSamples > 0 {
+        homs, hets, missing, sampleMaf = makeHetHomozygotes(record, header, runeLookup[idx])
 
         if len(homs) == 0 && len(hets) == 0 {
           continue
         }
       }
 
+      // output is [chr, pos, type, ref, alt, trTv, het, heterozygosity, hom, homozygosity, missing, missingness, sampleMaf]
+      // if keepId append id
+      // if keepInfo append [alleleIndex, info]
       var output bytes.Buffer
-      if len(record[chromIdx]) < 4 || record[chromIdx][0:2] != "ch" {
+      if len(record[chromIdx]) < 4 || record[chromIdx][0:3] != "chr" {
         output.WriteString("chr")
       }
+
       output.WriteString(record[chromIdx])
       output.WriteString("\t")
       output.WriteString(pos)
       output.WriteString("\t")
+
       if multiallelic {
         output.WriteString("MULTIALLELIC")
       } else {
@@ -330,27 +378,55 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
 
       output.WriteString("\t")
 
+      // Write missing samples
+      // heterozygotes \t heterozygosity
       if len(hets) == 0 {
         output.WriteString(emptyField)
+        output.WriteString("\t")
+        output.WriteString("0")
       } else {
         output.WriteString(strings.Join(hets, fieldDelimiter))
+        output.WriteString("\t")
+        output.WriteString(strconv.FormatFloat(float64(len(hets)) / numSamples, 'G', -1, 64))
       }
 
       output.WriteString("\t")
 
+      // Write missing samples
+      // homozygotes \t homozygosity
       if len(homs) == 0 {
         output.WriteString(emptyField)
+        output.WriteString("\t")
+        output.WriteString("0")
       } else {
         output.WriteString(strings.Join(homs, fieldDelimiter))
+        output.WriteString("\t")
+        output.WriteString(strconv.FormatFloat(float64(len(homs)) / numSamples, 'G', -1, 64))
       }
 
       output.WriteString("\t")
 
+      // Write missing samples
+      // missingGenos \t missingness
       if len(missing) == 0 {
         output.WriteString(emptyField)
+        output.WriteString("\t")
+        output.WriteString("0")
       } else {
         output.WriteString(strings.Join(missing, fieldDelimiter))
+        output.WriteString("\t")
+        output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', -1, 64))
       }
+
+      // Write the sample minor allele frequency
+      // This can be 0 in one of wo situations
+      // First, if we have only missing genotypes at this site
+      // However, in this case, we don't reach this code, because of line
+      // 302 (if len(homs) == 0 && len(hets) == 0)
+      // Else if there are truly no minor allele
+      output.WriteString("\t")
+
+      output.WriteString(strconv.FormatFloat(sampleMaf, 'G', -1, 64))
 
       if keepId == true {
         output.WriteString("\t")
@@ -489,38 +565,107 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
   return "INS", pos, ref, insBuffer.String(), nil
 }
 
-func makeHetHomozygotes(fields []string, header []string, alleleIdx string) ([]string, []string, []string) {
-  simpleGt := strings.Contains(fields[formatIdx], ":")
-
-  gt := make([]string, 0, 2)
-  gtCount := 0
-  altCount := 0
+// Current limitations: Does not support alleleIdx > 9, or sites which have 2 digits allele numbers
+func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]string, []string, []string, float64) {
+  simpleGt := !strings.Contains(fields[formatIdx], ":")
 
   var homs []string
   var hets []string
   var missing []string
 
+  gt := make([]string, 0, 2)
+  gtCount := 0
+  altCount := 0
+  totalAltCount := 0
+  totalGtCount := 0
+
+  // Unfortunately there is no guarantee that genotypes will be consistently phased or unphased
+  /*  From https://samtools.github.io/hts-specs/VCFv4.1.pdf
+  #CHROM POS ID REF ALT QUAL FILTER INFO FORMAT NA00001 NA00002 NA00003
+  20 14370 rs6054257 G A 29 PASS NS=3;DP=14;AF=0.5;DB;H2 GT:GQ:DP:HQ 0|0:48:1:51,51 1|0:48:8:51,51 1/1:43:5:.,.
+  20 17330 . T A 3 q10 NS=3;DP=11;AF=0.017 GT:GQ:DP:HQ 0|0:49:3:58,50 0|1:3:5:65,3 0/0:41:3
+  20 1110696 rs6040355 A G,T 67 PASS NS=2;DP=10;AF=0.333,0.667;AA=T;DB GT:GQ:DP:HQ 1|2:21:6:23,27 2|1:2:0:18,2 2/2:35:4
+  20 1230237 . T . 47 PASS NS=3;DP=13;AA=T GT:GQ:DP:HQ 0|0:54:7:56,60 0|0:48:4:51,51 0/0:61:2
+  20 1234567 microsat1 GTC G,GTCT 50 PASS NS=3;DP=9;AA=G GT:GQ:DP 0/1:35:4 0/2:17:2 1/1:40:3
+  */
   SAMPLES:
     for i := 9; i < len(header); i++ {
-      if strings.Contains(fields[i], "|") {
-        if (simpleGt && strings.Contains(fields[i], "0|0:")) || fields[i] == "0|0" {
+      // haploid
+      if len(fields[i]) == 1 || fields[i][1] == ':' {
+        fmt.Print("IS HAPLOID")
+        if fields[i][0] == '.' {
+          missing = append(missing, header[i])
           continue
         }
 
-        if strings.Contains(fields[i], ".|.") {
-          missing = append(missing, header[i])
-          continue SAMPLES
+        if fields[i][0] == '0' {
+          totalGtCount += 1
+          continue
+        }
+
+        // We don't support haploid genotypes very well; I will count such sites 
+        // heterozygous, just to indicate single copy, because downstream tools
+        // will typicaly consider homozygotes to have 2 copies of the alt
+        // and hets to have 1 copy of the alt
+        if rune(fields[i][0]) == alleleNum {
+          totalAltCount++
+          hets = append(hets, header[i])
+          continue
+        }
+
+        continue
+      }
+
+      // Allow for some rare cases where > 10 alleles (including reference)
+      if fields[i][1] == '|' || fields[i][2] == '|' {
+        // Speed up the most common cases
+        if simpleGt {
+          if fields[i] == "0|0" {
+            totalGtCount += 2
+            continue
+          }
+
+          if fields[i] == ".|." {
+            missing = append(missing, header[i])
+            continue
+          }
+        } else {
+          if fields[i][0:4] == "0|0:" {
+            totalGtCount += 2
+            continue
+          }
+
+          // Don't count missing samples toward totalGt, so that sampleMaf
+          // is conservative (missing genotypes are not informative)
+          if fields[i][0:4] == ".|.:" {
+            missing = append(missing, header[i])
+            continue
+          }
         }
 
         gt = strings.Split(fields[i], "|")
       } else {
-        if (simpleGt && strings.Contains(fields[i], "0/0:")) || fields[i] == "0/0" {
-          continue
-        }
+        // alleles separated by /
+        if simpleGt {
+          if fields[i] == "0/0" {
+            totalGtCount += 2
+            continue
+          }
 
-        if strings.Contains(fields[i], "./.") {
-          missing = append(missing, header[i])
-          continue SAMPLES
+          if fields[i] == "./." {
+            missing = append(missing, header[i])
+            continue
+          }
+        } else {
+          if fields[i][0:4] == "0/0:" {
+            totalGtCount += 2
+            continue
+          }
+
+          if fields[i][0:4] == "./.:" {
+            missing = append(missing, header[i])
+            continue
+          }
         }
 
         gt = strings.Split(fields[i], "/")
@@ -528,19 +673,22 @@ func makeHetHomozygotes(fields []string, header []string, alleleIdx string) ([]s
 
       altCount = 0
       gtCount = 0
+      // log.Print(gt)
       for _, val := range gt {
-        if val == "." {
+        if val[0] == '.' {
           missing = append(missing, header[i])
           continue SAMPLES
         }
 
-        // val[0] doesn't work...because byte array?
-        if string(val[0]) == alleleIdx {
+        if rune(val[0]) == alleleNum {
           altCount++
         }
 
         gtCount++
       }
+
+      totalGtCount += gtCount
+      totalAltCount += altCount
 
       if altCount == 0 {
         continue
@@ -553,5 +701,10 @@ func makeHetHomozygotes(fields []string, header []string, alleleIdx string) ([]s
       }
     }
 
-  return homs, hets, missing
+  if totalGtCount == 0 {
+    return homs, hets, missing, 0
+  }
+
+  // We return the sampleMaf solely because I want to make no ploidy assumptions
+  return homs, hets, missing, float64(totalAltCount) / float64(totalGtCount)
 }
