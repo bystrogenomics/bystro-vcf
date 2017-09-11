@@ -378,7 +378,15 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(hets, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(hets)) / numSamples, 'G', -1, 64))
+
+        // This gives plenty precision; we are mostly interested in
+        // the first or maybe 2-3 significant digits
+        // https://play.golang.org/p/Ux-QmClaJG
+        // Also, gnomAD seems to use 6 bits of precision
+        // the bitSize == 64 allows us to round properly past 6 s.f
+        // Note: 'G' requires these numbers to be < 0 for proper precision
+        // (elase only 6 s.f total, rather than after decimal)
+        output.WriteString(strconv.FormatFloat(float64(len(hets)) / numSamples, 'G', 6, 64))
       }
 
       output.WriteString("\t")
@@ -392,7 +400,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(homs, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(homs)) / numSamples, 'G', -1, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(homs)) / numSamples, 'G', 6, 64))
       }
 
       output.WriteString("\t")
@@ -406,7 +414,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(missing, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', -1, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', 6, 64))
       }
 
       // Write the sample minor allele frequency
@@ -417,7 +425,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       // Else if there are truly no minor allele
       output.WriteString("\t")
 
-      output.WriteString(strconv.FormatFloat(sampleMaf, 'G', -1, 64))
+      output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 6, 64))
 
       if keepId == true {
         output.WriteString("\t")
@@ -564,10 +572,10 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
   var hets []string
   var missing []string
 
+  var gt []string
+
   var gtCount int
   var altCount int
-
-  gt := make([]string, 0, 2)
 
   var totalAltCount int
   var totalGtCount int
