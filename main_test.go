@@ -420,7 +420,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	if len(actualHoms) == 0 && len(actualHets) == 3 && len(missing) == 1 {
 		t.Log("OK: GT's containing missing data are entirely uncertain, therefore skipped. Missing genotypes are called if any of the calls are missing")
 	} else {
-		t.Error("NOT OK: Fails to handle missing data", actualHoms, actualHets)
+		t.Error("NOT OK: Fails to handle missing data", actualHoms, actualHets, missing)
 	}
 
 	if sampleMaf == float64(3)/float64(6) {
@@ -553,7 +553,54 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	}
 }
 
+func TestMakeHetHomozygotesHaploid(t *testing.T) {
+	header := []string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3", "S4"}
 
+	sharedFieldsGT := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT"}
+
+	// GT:DS:GL is what 1000 genomes phase 1 provides
+	sharedFieldsGTcomplex := []string{"10", "1000", "rs#", "C", "T", "100", "PASS", "AC=1", "GT:DS:GL"}
+
+	fields := append(sharedFieldsGT, "0", ".", "1", "0")
+
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	actualHoms, actualHets, missing, sampleMaf := makeHetHomozygotes(fields, header, '1')
+
+	if len(actualHoms) == 0 && len(actualHets) == 1 && len(missing) == 1 {
+		t.Log("OK: Haploid non-reference sites called heterozygous")
+	} else {
+		t.Error("NOT OK: Haploid non-reference sites called heterozygous", actualHoms, actualHets, missing)
+	}
+
+	if sampleMaf == float64(1)/float64(3) {
+		t.Log("OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid", sampleMaf)
+	} else {
+		t.Error("NOT OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid", sampleMaf)
+	}
+
+	fields = append(sharedFieldsGTcomplex, "0:1", ".:1", "1:1", "0:1")
+
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
+
+	if len(actualHoms) == 0 && len(actualHets) == 1 && len(missing) == 1 {
+		t.Log("OK: Haploid non-reference sites called heterozygous in complex case", sampleMaf)
+	} else {
+		t.Error("NOT OK: Haploid non-reference sites called heterozygous in complex case", sampleMaf)
+	}
+
+	if sampleMaf == float64(1)/float64(3) {
+		t.Log("OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid complex GT")
+	} else {
+		t.Error("NOT OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid complex GT")
+	}
+}
+
+// Headers are expected to be:
+// chrom: 0, pos: 1, siteType: 2, ref: 3, alt: 4, trTv: 5, heterozygotes: 6, heterozygosity: 7
+// homozyogtes: 8, homozygosity: 9, missingGenos: 10, missingness: 11, sampleMaf: 12,
+// id: 13 (if keepId), alleleIdx: 14 (if keepId and keepInfo), info: 15 (if keepId and keepInfo)
+// if keepInfo only: alleleIdx: 13, info: 14
 func TestOutputsInfo(t *testing.T) {
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}, "\t")
@@ -759,16 +806,44 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 			t.Error("NOT OK: Couldn't recapitualte the het", resultRow)
 		}
 
+		// heterozygosity
+		if resultRow[7] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+			t.Log("OK: Recapitualte the heterozygosity", resultRow)
+		} else {
+			t.Error("NOT OK: Couldn't recapitualte the heterozygosity", resultRow)
+		}
+
 		if resultRow[8] == "Sample3" {
 			t.Log("OK: Recapitualte the homozygote", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the homozygote", resultRow)
 		}
 
+		// homozygosity
+		if resultRow[9] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+			t.Log("OK: Recapitualte the homozygosity", resultRow)
+		} else {
+			t.Error("NOT OK: Couldn't recapitualte the homozygosity", resultRow)
+		}
+
 		if resultRow[10] == "Sample4" {
 			t.Log("OK: Recapitualte the missing sample", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the missing sample", resultRow)
+		}
+
+		// missingness
+		if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+			t.Log("OK: Recapitualte the missingness", resultRow)
+		} else {
+			t.Error("NOT OK: Couldn't recapitualte the missingness", resultRow)
+		}
+
+		// sampleMaf ; 2 alleles for 1|1, 1 allele for 0|1 and 0 in denominator for .|.
+		if resultRow[12] == strconv.FormatFloat(float64(3)/float64(6), 'G', -1, 64) {
+			t.Log("OK: sampleMaf will count homozygotes, heterozygotes, and will exclude missing alleles from denominator", resultRow)
+		} else {
+			t.Error("NOT OK: sampleMaf will count homozygotes, heterozygotes, and will exclude missing alleles from denominator", resultRow)
 		}
 	})
 
@@ -816,6 +891,57 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
 		} else {
 			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+
+		// missingness
+		if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		} else {
+			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		}
+
+		if index == 0 {
+			// heterozygosity
+			if resultRow[7] == "0" {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// homozygosity
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', -1, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		} else if index == 1 {
+			// heterozygosity
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', -1, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
 		}
 	})
 
@@ -868,9 +994,9 @@ func TestOutputMultiallelic(t *testing.T) {
   		}
 
   		if resultRow[8] == config.emptyField {
-				t.Log("OK: Recapitualte 1st allele has no hets", resultRow)
+				t.Log("OK: Recapitualte 1st allele has no homozygotes", resultRow)
   		} else {
-  			t.Error("NOT OK: Couldn't recapitualte 1st allele has no hets", resultRow)
+  			t.Error("NOT OK: Couldn't recapitualte 1st allele has no homozygotes", resultRow)
   		}
 
   		if resultRow[10] == "Sample4" {
@@ -878,6 +1004,34 @@ func TestOutputMultiallelic(t *testing.T) {
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 1st allele missing for Sample4", resultRow)
   		}
+
+  		// heterozygosity
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case", resultRow)
+			}
+
+			// homozygosity
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case", resultRow)
+			}
+
+			// missingness
+			if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+				t.Log("OK: Recapitualte the missingness in multialellic case", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the missingness in multiallelic case", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 0|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', -1, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
 		}
 
 		if index == 1 {
@@ -894,9 +1048,9 @@ func TestOutputMultiallelic(t *testing.T) {
   		}
 
   		if resultRow[8] == "Sample3" {
-				t.Log("OK: Recapitualte 2nd allele has Sample3 as het", resultRow)
+				t.Log("OK: Recapitualte 2nd allele has Sample3 as homozygous", resultRow)
   		} else {
-  			t.Error("NOT OK: Couldn't recapitualte 2nd allele has Sample3 as het", resultRow)
+  			t.Error("NOT OK: Couldn't recapitualte 2nd allele has Sample3 as homozygous", resultRow)
   		}
 
   		if resultRow[10] == "Sample4" {
@@ -904,6 +1058,34 @@ func TestOutputMultiallelic(t *testing.T) {
   		} else {
   			t.Error("NOT OK: Couldn't recapitualte 2nd allele missing for Sample4", resultRow)
   		}
+
+  		// heterozygosity
+			if resultRow[7] == "0" {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// missingness
+			if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', -1, 64) {
+				t.Log("OK: Recapitualte the missingness in multialellic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the missingness in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 2|2 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', -1, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele", resultRow)
+			}
 		}
 	})
 
@@ -940,6 +1122,27 @@ func TestOutputComplexMultiDel(t *testing.T) {
   	if resultRow[0] != "chr16" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
+
+  	// heterozygosity
+		if resultRow[9] == "0" {
+			t.Log("OK: When no samples provided, heterozygosity is 0", resultRow)
+		} else {
+			t.Error("NOT OK: When no samples provided, heterozygosity is not 0", resultRow)
+		}
+
+		// homozygosity
+		if resultRow[9] == "0" {
+			t.Log("OK: When no samples provided, homozygosity is 0", resultRow)
+		} else {
+			t.Error("NOT OK: When no samples provided, homozygosity is not 0", resultRow)
+		}
+
+		// missingness
+		if resultRow[11] == "0" {
+			t.Log("OK: When no samples provided, missingness is 0", resultRow)
+		} else {
+			t.Error("NOT OK: When no samples provided, missingness is not 0", resultRow)
+		}
 
   	if index == 0 {
   		if resultRow[refIdx] == "A" && resultRow[posIdx] == strconv.Itoa(84034434 + 1) && resultRow[altIdx] == "-18" {

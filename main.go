@@ -255,15 +255,6 @@ func linePasses(record []string, header []string, filterKeys map[string]bool) bo
   return len(record) == len(header) && len(filterKeys) == 0 || filterKeys[record[filterIdx]] == true
 }
 
-// func gatherAlt(ref byte, alt string, pos string, multiallelic bool, altCache map[byte]map[string][]string) []string {
-//  if altCache[ref] == nil {
-//    alt[ref] = make(map[string][]string
-//  } else if altCache[ref][alt] != nil {
-//    return 
-//  }
-
-// }
-
 func altIsValid(alt string) bool {
   if len(alt) == 1 {
     if alt != "A" && alt != "C" && alt != "T" && alt != "G" {
@@ -573,11 +564,13 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
   var hets []string
   var missing []string
 
+  var gtCount int
+  var altCount int
+
   gt := make([]string, 0, 2)
-  gtCount := 0
-  altCount := 0
-  totalAltCount := 0
-  totalGtCount := 0
+
+  var totalAltCount int
+  var totalGtCount int
 
   // Unfortunately there is no guarantee that genotypes will be consistently phased or unphased
   /*  From https://samtools.github.io/hts-specs/VCFv4.1.pdf
@@ -592,14 +585,13 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
     for i := 9; i < len(header); i++ {
       // haploid
       if len(fields[i]) == 1 || fields[i][1] == ':' {
-        fmt.Print("IS HAPLOID")
         if fields[i][0] == '.' {
           missing = append(missing, header[i])
           continue
         }
 
         if fields[i][0] == '0' {
-          totalGtCount += 1
+          totalGtCount++
           continue
         }
 
@@ -609,6 +601,7 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
         // and hets to have 1 copy of the alt
         if rune(fields[i][0]) == alleleNum {
           totalAltCount++
+          totalGtCount++
           hets = append(hets, header[i])
           continue
         }
@@ -629,6 +622,22 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
             missing = append(missing, header[i])
             continue
           }
+
+          if alleleNum == '1' {
+            if fields[i] == "0|1" || fields[i] == "1|0" {
+              totalGtCount += 2
+              totalAltCount++
+              hets = append(hets, header[i])
+              continue
+            }
+
+            if fields[i] == "1|1"{
+              totalGtCount += 2
+              totalAltCount += 2
+              homs = append(homs, header[i])
+              continue
+            }
+          }
         } else {
           if fields[i][0:4] == "0|0:" {
             totalGtCount += 2
@@ -640,6 +649,22 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
           if fields[i][0:4] == ".|.:" {
             missing = append(missing, header[i])
             continue
+          }
+
+          if alleleNum == '1' {
+            if fields[i][0:4] == "0|1:" || fields[i][0:4] == "1|0:" {
+              totalGtCount += 2
+              totalAltCount++
+              hets = append(hets, header[i])
+              continue
+            }
+
+            if fields[i][0:4] == "1|1:" {
+              totalGtCount += 2
+              totalAltCount += 2
+              homs = append(homs, header[i])
+              continue
+            }
           }
         }
 
@@ -656,6 +681,22 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
             missing = append(missing, header[i])
             continue
           }
+
+          if alleleNum == '1' {
+            if fields[i] == "0/1" || fields[i] == "1/0" {
+              totalGtCount += 2
+              totalAltCount++
+              hets = append(hets, header[i])
+              continue
+            }
+
+            if fields[i] == "1/1"{
+              totalGtCount += 2
+              totalAltCount += 2
+              homs = append(homs, header[i])
+              continue
+            }
+          }
         } else {
           if fields[i][0:4] == "0/0:" {
             totalGtCount += 2
@@ -666,11 +707,28 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
             missing = append(missing, header[i])
             continue
           }
+
+          if alleleNum == '1' {
+            if fields[i][0:4] == "0/1:" || fields[i][0:4] == "1/0:" {
+              totalGtCount += 2
+              totalAltCount++
+              hets = append(hets, header[i])
+              continue
+            }
+
+            if fields[i] == "1/1:"{
+              totalGtCount += 2
+              totalAltCount += 2
+              homs = append(homs, header[i])
+              continue
+            }
+          }
         }
 
         gt = strings.Split(fields[i], "/")
       }
 
+      // We should only get here for triploid+ and multiallelics
       altCount = 0
       gtCount = 0
       // log.Print(gt)
