@@ -1,4 +1,3 @@
-// estab exports elasticsearch fields as tab separated values
 package main
 import (
   "bufio"
@@ -278,7 +277,16 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
   var alleles []string
   var multiallelic bool
 
+  // Declare sample-related variables outside loop, in case this helps us
+  // reduce allocations
+  // Safe, because the property of having samples is invariant across lines within
+  // a single file
   var numSamples float64
+  var homs []string
+  var hets []string
+  var missing []string
+  var sampleMaf float64
+  var effectiveSamples float64
 
   if(len(header) > 9) {
     numSamples = float64(len(header) - 9)
@@ -294,11 +302,6 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
     if !linePasses(record, header, keepFiltered) {
       continue
     }
-
-    var homs []string
-    var hets []string
-    var missing []string
-    var sampleMaf float64
 
     alleles = strings.Split(record[altIdx], ",")
     multiallelic = len(alleles) > 1
@@ -316,6 +319,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       }
 
       siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx], multiallelic)
+
       if err != nil {
         log.Fatal(err)
       }
@@ -333,6 +337,9 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         if len(homs) == 0 && len(hets) == 0 {
           continue
         }
+
+        // homozygosity and heterozygosity should be relative to complete genotypes
+        effectiveSamples = numSamples - float64(len(missing))
       }
 
       // output is [chr, pos, type, ref, alt, trTv, het, heterozygosity, hom, homozygosity, missing, missingness, sampleMaf]
@@ -385,7 +392,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         // the bitSize == 64 allows us to round properly past 6 s.f
         // Note: 'G' requires these numbers to be < 0 for proper precision
         // (elase only 6 s.f total, rather than after decimal)
-        output.WriteString(strconv.FormatFloat(float64(len(hets)) / numSamples, 'G', 6, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(hets)) / effectiveSamples, 'G', 6, 64))
       }
 
       output.WriteString("\t")
@@ -399,7 +406,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(homs, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(homs)) / numSamples, 'G', 6, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(homs)) / effectiveSamples, 'G', 6, 64))
       }
 
       output.WriteString("\t")
@@ -424,7 +431,11 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       // Else if there are truly no minor allele
       output.WriteString("\t")
 
-      output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 6, 64))
+      if sampleMaf == 0 {
+        output.WriteString("0")
+      } else {
+        output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 6, 64))
+      }
 
       if keepId == true {
         output.WriteString("\t")

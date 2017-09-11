@@ -863,7 +863,8 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 		}
 
 		// heterozygosity
-		if resultRow[7] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+		// the denominator excludes the missing samples
+		if resultRow[7] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
 			t.Log("OK: Recapitualte the heterozygosity", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the heterozygosity", resultRow)
@@ -876,7 +877,8 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 		}
 
 		// homozygosity
-		if resultRow[9] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+		// the denominator excludes the missing samples
+		if resultRow[9] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
 			t.Log("OK: Recapitualte the homozygosity", resultRow)
 		} else {
 			t.Error("NOT OK: Couldn't recapitualte the homozygosity", resultRow)
@@ -889,6 +891,7 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 		}
 
 		// missingness
+		// missingness denominator does not exclude missing samples
 		if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
 			t.Log("OK: Recapitualte the missingness", resultRow)
 		} else {
@@ -950,6 +953,7 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 		}
 
 		// missingness
+		// denominator does not exclude missingness
 		if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
 			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
 		} else {
@@ -965,7 +969,8 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 			}
 
 			// homozygosity
-			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+			// the denominator excludes the missing samples
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
 				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			} else {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
@@ -979,7 +984,8 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 			}
 		} else if index == 1 {
 			// heterozygosity
-			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+			// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
 				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
 			} else {
 				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
@@ -994,6 +1000,651 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 
 			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
 			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		}
+	})
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+
+	// repeat but with "/"
+	record = strings.Join([]string{"10", "1000", "rs456", "C", "T,G", "100", "PASS",
+		"AC=1", "GT", "1/1", "0/0", "0/2", "./."}, "\t")
+
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader = bufio.NewReader(strings.NewReader(lines))
+
+	index = -1
+  readVcf(&config, reader, func(row string) {
+  	index++
+ 
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
+  	} else {
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	}
+
+  	if resultRow[len(resultRow) - 3] == "rs456" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", altIdx, resultRow)
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
+
+  	if err != nil {
+  		t.Error("NOT OK: The 9th column should be numeric")
+  	}
+
+  	if altIdx == index {
+  		t.Log("OK: Multiallelic index is in 10th column when keepInfo is true")
+		} else {
+			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
+		}
+
+		if resultRow[len(resultRow) - 1] == "AC=1" {
+			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+
+		// missingness
+		// denominator does not exclude missingness
+		if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		} else {
+			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		}
+
+		if index == 0 {
+			// heterozygosity
+			if resultRow[7] == "0" {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// homozygosity
+			// the denominator excludes the missing samples
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		} else if index == 1 {
+			// heterozygosity
+			// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		}
+	})
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+
+	// repeat but with "|" and GT
+	record = strings.Join([]string{"10", "1000", "rs456", "C", "T,G", "100", "PASS",
+		"AC=1", "GT:GQ", "1|1:1,2,3", "0|0:4,5,6", "0|2:1,3,5", ".|.:0,0,0"}, "\t")
+
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader = bufio.NewReader(strings.NewReader(lines))
+
+	index = -1
+  readVcf(&config, reader, func(row string) {
+  	index++
+ 
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
+  	} else {
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	}
+
+  	if resultRow[len(resultRow) - 3] == "rs456" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", altIdx, resultRow)
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
+
+  	if err != nil {
+  		t.Error("NOT OK: The 9th column should be numeric")
+  	}
+
+  	if altIdx == index {
+  		t.Log("OK: Multiallelic index is in 10th column when keepInfo is true")
+		} else {
+			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
+		}
+
+		if resultRow[len(resultRow) - 1] == "AC=1" {
+			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+
+		// missingness
+		// denominator does not exclude missingness
+		if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		} else {
+			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		}
+
+		if index == 0 {
+			// heterozygosity
+			if resultRow[7] == "0" {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// homozygosity
+			// the denominator excludes the missing samples
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		} else if index == 1 {
+			// heterozygosity
+			// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		}
+	})
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+
+	// repeat but with "/" and GT
+	record = strings.Join([]string{"10", "1000", "rs456", "C", "T,G", "100", "PASS",
+		"AC=1", "GT:GQ", "1/1:1,2,3", "0/0:4,5,6", "0/2:1,3,5", "./.:0,0,0"}, "\t")
+
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader = bufio.NewReader(strings.NewReader(lines))
+
+	index = -1
+  readVcf(&config, reader, func(row string) {
+  	index++
+ 
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr10" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
+  	} else {
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	}
+
+  	if resultRow[len(resultRow) - 3] == "rs456" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", altIdx, resultRow)
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
+
+  	if err != nil {
+  		t.Error("NOT OK: The 9th column should be numeric")
+  	}
+
+  	if altIdx == index {
+  		t.Log("OK: Multiallelic index is in 10th column when keepInfo is true")
+		} else {
+			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
+		}
+
+		if resultRow[len(resultRow) - 1] == "AC=1" {
+			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+
+		// missingness
+		// denominator does not exclude missingness
+		if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		} else {
+			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		}
+
+		if index == 0 {
+			// heterozygosity
+			if resultRow[7] == "0" {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// homozygosity
+			// the denominator excludes the missing samples
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		} else if index == 1 {
+			// heterozygosity
+			// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		}
+	})
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+
+	// Test with no missing alleles
+	header = strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5"}, "\t")
+	record = strings.Join([]string{"15", "1001", "rs457", "C", "T,G", "100", "PASS",
+		"AC=1", "GT", "0|1", "2|0", "2|2", "0|0", "1|0"}, "\t")
+
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+
+	reader = bufio.NewReader(strings.NewReader(lines))
+
+	index = -1
+  readVcf(&config, reader, func(row string) {
+  	index++
+ 
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr15" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
+  	} else {
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	}
+
+  	if resultRow[len(resultRow) - 3] == "rs457" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", altIdx, resultRow)
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
+
+  	if err != nil {
+  		t.Error("NOT OK: The 9th column should be numeric")
+  	}
+
+  	if altIdx == index {
+  		t.Log("OK: Multiallelic index is in 10th column when keepInfo is true")
+		} else {
+			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
+		}
+
+		if resultRow[len(resultRow) - 1] == "AC=1" {
+			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+
+		// missingness
+		// denominator does not exclude missingness
+		if resultRow[11] == "0" {
+			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		} else {
+			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		}
+
+		if index == 0 {
+			// heterozygosity
+			if resultRow[7] == strconv.FormatFloat(float64(2)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// homozygosity
+			// the denominator excludes the missing samples
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(10), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		} else if index == 1 {
+			// heterozygosity: 1 het for 2|0
+			// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity: 1 homozygote (2|2)
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 2|2
+			if resultRow[12] == strconv.FormatFloat(float64(3)/float64(10), 'G', 6, 64){
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		}
+	})
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+
+	// Test with no missing alleles, and "/" delimiter
+	header = strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5"}, "\t")
+	record = strings.Join([]string{"15", "1001", "rs457", "C", "T,G", "100", "PASS",
+		"AC=2", "GT", "0/1", "2/0", "2/2", "0/0", "1/0"}, "\t")
+
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+
+	reader = bufio.NewReader(strings.NewReader(lines))
+
+	index = -1
+  readVcf(&config, reader, func(row string) {
+  	index++
+ 
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr15" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
+  	} else {
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	}
+
+  	if resultRow[len(resultRow) - 3] == "rs457" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", altIdx, resultRow)
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
+
+  	if err != nil {
+  		t.Error("NOT OK: The 9th column should be numeric")
+  	}
+
+  	if altIdx == index {
+  		t.Log("OK: Multiallelic index is in 10th column when keepInfo is true")
+		} else {
+			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
+		}
+
+		if resultRow[len(resultRow) - 1] == "AC=2" {
+			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+
+		// missingness
+		// denominator does not exclude missingness
+		if resultRow[11] == "0" {
+			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		} else {
+			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		}
+
+		if index == 0 {
+			// heterozygosity
+			if resultRow[7] == strconv.FormatFloat(float64(2)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// homozygosity
+			// the denominator excludes the missing samples
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(10), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		} else if index == 1 {
+			// heterozygosity: 1 het for 2|0
+			// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity: 1 homozygote (2|2)
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 2|2
+			if resultRow[12] == strconv.FormatFloat(float64(3)/float64(10), 'G', 6, 64){
+				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		}
+	})
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+
+	// Test with no missing alleles, "/" delimiter and stuff after the genotype
+	header = strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5"}, "\t")
+	record = strings.Join([]string{"15", "1001", "rs457", "C", "T,G", "100", "PASS",
+		"AC=2", "GT:GL", "0/1:4,5,6", "2/0:7,8,9", "2/2:1,2,3", "0/0:.,.,.", "1/0:1,2,5"}, "\t")
+
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+
+	reader = bufio.NewReader(strings.NewReader(lines))
+
+	index = -1
+  readVcf(&config, reader, func(row string) {
+  	index++
+ 
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if resultRow[0] != "chr15" {
+  		t.Error("chromosome should have chr appended", resultRow)
+  	}
+
+  	if len(resultRow) == 16 {
+  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
+  	} else {
+  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	}
+
+  	if resultRow[len(resultRow) - 3] == "rs457" {
+			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
+		} else {
+			t.Error("NOT OK: Couldn't add ID field", altIdx, resultRow)
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
+
+  	if err != nil {
+  		t.Error("NOT OK: The 9th column should be numeric")
+  	}
+
+  	if altIdx == index {
+  		t.Log("OK: Multiallelic index is in 10th column when keepInfo is true")
+		} else {
+			t.Error("NOT OK: Multiallelic index isn't in 10th column when keepInfo is true", resultRow)
+		}
+
+		if resultRow[len(resultRow) - 1] == "AC=2" {
+			t.Log("OK: add INFO field correctly for multiallelic field in column 10")
+		} else {
+			t.Error("NOT OK: Couldn't add INFO field", resultRow)
+		}
+
+		// missingness
+		// denominator does not exclude missingness
+		if resultRow[11] == "0" {
+			t.Log("OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		} else {
+			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
+		}
+
+		if index == 0 {
+			// heterozygosity
+			if resultRow[7] == strconv.FormatFloat(float64(2)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// homozygosity
+			// the denominator excludes the missing samples
+			if resultRow[9] == "0" {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
+			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(10), 'G', 6, 64) {
+				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			} else {
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+			}
+		} else if index == 1 {
+			// heterozygosity: 1 het for 2|0
+			// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// homozygosity: 1 homozygote (2|2)
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(5), 'G', 6, 64) {
+				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			} else {
+				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// sampleMaf ; 2 alleles for 2|2
+			if resultRow[12] == strconv.FormatFloat(float64(3)/float64(10), 'G', 6, 64){
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1062,7 +1713,8 @@ func TestOutputMultiallelic(t *testing.T) {
   		}
 
   		// heterozygosity
-			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+  		// the denominator excludes the missing samples
+			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
 				t.Log("OK: Recapitualte the heterozygosity in multiallelic case", resultRow)
 			} else {
 				t.Error("NOT OK: Couldn't recapitualte the heterozygosity in multiallelic case", resultRow)
@@ -1076,6 +1728,7 @@ func TestOutputMultiallelic(t *testing.T) {
 			}
 
 			// missingness
+			// the denominator of missingness does not exclude the missing samples
 			if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
 				t.Log("OK: Recapitualte the missingness in multialellic case", resultRow)
 			} else {
@@ -1123,13 +1776,15 @@ func TestOutputMultiallelic(t *testing.T) {
 			}
 
 			// homozygosity
-			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
+			// the denominator excludes the missing samples
+			if resultRow[9] == strconv.FormatFloat(float64(1)/float64(3), 'G', 6, 64) {
 				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			} else {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			}
 
 			// missingness
+			// the denominator of missingness does not exclude the missing samples
 			if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 6, 64) {
 				t.Log("OK: Recapitualte the missingness in multialellic case for 2nd allele", resultRow)
 			} else {
