@@ -575,6 +575,10 @@ func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) 
 }
 
 // Current limitations: Does not support alleleIdx > 9, or sites which have 2 digits allele numbers
+// This allows us to improve performance, decrease code verbosity
+// Most multialellics with > 10 alleles will be false positives
+// because a true site would require a mutation rate of >> 1e-8 (say in chromosomal instability) and 10k samples
+// or an effective population size of billions (vs 10k expected) ; else .001^10 == 10^-30 == never happens
 func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]string, []string, []string, float64) {
   simpleGt := !strings.Contains(fields[formatIdx], ":")
 
