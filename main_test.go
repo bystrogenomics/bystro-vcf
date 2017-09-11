@@ -55,6 +55,62 @@ func TestKeepFlagsTrue(t *testing.T) {
   }
 }
 
+func TestHeader(t *testing.T) {
+	config := Config{keepId: false, keepInfo: false}
+
+	header := stringHeader(&config)
+
+	expected := strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf"}, "\t")
+
+	if header == expected + "\n" {
+		t.Log("OK: print header", header, expected)
+	} else {
+		t.Error("NOT OK: print header", header, expected)
+	}
+
+	config = Config{keepId: true, keepInfo: false}
+
+	header = stringHeader(&config)
+
+	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf", "id"}, "\t")
+
+	if header == expected + "\n" {
+		t.Log("OK: print header with --keepId true", header, expected)
+	} else {
+		t.Error("NOT OK: print header with --keepId true", header, expected)
+	}
+
+	config = Config{keepId: false, keepInfo: true}
+
+	header = stringHeader(&config)
+
+	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+    "sampleMaf", "alleleIdx", "info"}, "\t")
+
+	if header == expected + "\n" {
+		t.Log("OK: print header with --keepInfo true", header, expected)
+	} else {
+		t.Error("NOT OK: print header with --keepInfo true", header, expected)
+	}
+
+	config = Config{keepId: true, keepInfo: true}
+
+	header = stringHeader(&config)
+
+	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+    "sampleMaf", "id", "alleleIdx", "info"}, "\t")
+
+	if header == expected + "\n" {
+		t.Log("OK: print header with -keepId true --keepInfo true", header)
+	} else {
+		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
+	}
+}
+
 func TestUpdateFieldsWithAlt(t *testing.T) {
 	expType, exPos, expRef, expAlt := "SNP", "100", "T", "C"
 

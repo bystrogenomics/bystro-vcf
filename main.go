@@ -126,8 +126,7 @@ func stringHeader(config *Config) string {
 }
 
 func header(config *Config) []string {
-  header := []string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf"}
+  header := parse.Header
 
   if config.keepId {
     header = append(header, "id")
