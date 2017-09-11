@@ -566,10 +566,10 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	// The allele index we want to test is always 1...unless it's a multiallelic site
 	actualHoms, actualHets, missing, sampleMaf := makeHetHomozygotes(fields, header, '1')
 
-	if len(actualHoms) == 0 && len(actualHets) == 1 && len(missing) == 1 {
-		t.Log("OK: Haploid non-reference sites called heterozygous")
+	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
+		t.Log("OK: Haploid non-reference sites called homozygous")
 	} else {
-		t.Error("NOT OK: Haploid non-reference sites called heterozygous", actualHoms, actualHets, missing)
+		t.Error("NOT OK: Haploid non-reference sites called homozygous", actualHoms, actualHets, missing)
 	}
 
 	if sampleMaf == float64(1)/float64(3) {
@@ -583,7 +583,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	// The allele index we want to test is always 1...unless it's a multiallelic site
 	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
 
-	if len(actualHoms) == 0 && len(actualHets) == 1 && len(missing) == 1 {
+	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
 		t.Log("OK: Haploid non-reference sites called heterozygous in complex case", sampleMaf)
 	} else {
 		t.Error("NOT OK: Haploid non-reference sites called heterozygous in complex case", sampleMaf)

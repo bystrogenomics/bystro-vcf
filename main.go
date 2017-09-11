@@ -604,13 +604,14 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
         }
 
         // We don't support haploid genotypes very well; I will count such sites 
-        // heterozygous, just to indicate single copy, because downstream tools
-        // will typicaly consider homozygotes to have 2 copies of the alt
-        // and hets to have 1 copy of the alt
+        // homozygous, because Dave Cutler says that is what people would mostly expect
+        // Note: downstream tools will typicaly consider homozygotes to have 2 copies of the alt
+        // and hets to have 1 copy of the alt, so special consideration must be made for haploids
+        // in such tools
         if rune(fields[i][0]) == alleleNum {
           totalAltCount++
           totalGtCount++
-          hets = append(hets, header[i])
+          homs = append(homs, header[i])
           continue
         }
 
@@ -678,7 +679,7 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
 
         gt = strings.Split(fields[i], "|")
       } else {
-        // alleles separated by /
+        // alleles separated by /, or some very malformed file
         if simpleGt {
           if fields[i] == "0/0" {
             totalGtCount += 2
@@ -734,6 +735,12 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
         }
 
         gt = strings.Split(fields[i], "/")
+      }
+
+      //https://play.golang.org/p/zjUf2rhBHn
+      if len(gt) == 1 {
+        log.Println("%s:%s : Skipping. Couldn't decode genotype %s", fields[chromIdx], fields[posIdx], fields[i])
+        return []string{}, []string{}, []string{}, 0
       }
 
       // We should only get here for triploid+ and multiallelics
