@@ -392,7 +392,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         // the bitSize == 64 allows us to round properly past 6 s.f
         // Note: 'G' requires these numbers to be < 0 for proper precision
         // (elase only 6 s.f total, rather than after decimal)
-        output.WriteString(strconv.FormatFloat(float64(len(hets)) / effectiveSamples, 'G', 6, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(hets)) / effectiveSamples, 'G', 4, 64))
       }
 
       output.WriteString("\t")
@@ -406,7 +406,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(homs, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(homs)) / effectiveSamples, 'G', 6, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(homs)) / effectiveSamples, 'G', 4, 64))
       }
 
       output.WriteString("\t")
@@ -420,7 +420,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(missing, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', 6, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', 4, 64))
       }
 
       // Write the sample minor allele frequency
@@ -434,7 +434,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       if sampleMaf == 0 {
         output.WriteString("0")
       } else {
-        output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 6, 64))
+        output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 4, 64))
       }
 
       if keepId == true {
