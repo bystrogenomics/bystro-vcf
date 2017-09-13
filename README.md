@@ -12,7 +12,7 @@ pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,."
 
 ## Output
 ```tsv
-chrom <Str>   pos <Int>   type <String[SNP|DEL|INS|MULTIALLELIC]>    ref <String>    alt <String>    trTv <Int[0|1|2]>     heterozygotes <String>     heterozygosity <Float64>    homozygotes <String>     homozygosity <Float64>     missingGenos <String>    missingness <Float64>    sampleMaf <Float64>    id <String?>    alleleIndex <Int?>   info <String?>
+chrom <String>   pos <Int>   type <String[SNP|DEL|INS|MULTIALLELIC]>    ref <String>    alt <String>    trTv <Int[0|1|2]>     heterozygotes <String>     heterozygosity <Float64>    homozygotes <String>     homozygosity <Float64>     missingGenos <String>    missingness <Float64>    sampleMaf <Float64>    id <String?>    alleleIndex <Int?>   info <String?>
 ```
 
 ## Options
