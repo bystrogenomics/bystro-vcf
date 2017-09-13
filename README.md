@@ -7,7 +7,7 @@ A VCF pre-processor. Takes a VCF file, splits multiallelics, normalizes indel re
 ```shell
 go get github.com/akotlar/bystro-vcf && go install $_;
 
-pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --keepFilter "PASS,."
+pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,."
 ```
 
 ## Output
@@ -40,7 +40,7 @@ Will add two fields: after either `missingGenos`, or `id` should `--keepId` be s
 
 
 ```shell
---keepFilter <String>
+--allowFilter <String>
 ```
 
 **Optional**. Which `FILTER` values to keep. Comma separated. Defaults to `"PASS,."`
