@@ -753,7 +753,7 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
 
       //https://play.golang.org/p/zjUf2rhBHn
       if len(gt) == 1 {
-        log.Println("%s:%s : Skipping. Couldn't decode genotype %s", fields[chromIdx], fields[posIdx], fields[i])
+        log.Printf("%s:%s : Skipping. Couldn't decode genotype %s", fields[chromIdx], fields[posIdx], fields[i])
         return []string{}, []string{}, []string{}, 0
       }
 
