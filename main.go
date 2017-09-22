@@ -33,6 +33,7 @@ type Config struct {
   fieldDelimiter string
   keepId bool
   keepInfo bool
+  //keepQual bool
   cpuProfile string
   keepFiltered map[string]bool
 }
@@ -44,6 +45,7 @@ func setup(args []string) *Config {
   flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
   flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
   flag.BoolVar(&config.keepId, "keepId", false, "Retain the ID field in output")
+  //flag.BoolVar(&config.keepQual, "keepQual", false, "Retain the QUAL field in output")
   flag.BoolVar(&config.keepInfo, "keepInfo", false, "Retain INFO field in output (2 appended output fields: allele index and the INFO field. Will appear after id field if --keepId flag set.")
   flag.StringVar(&config.cpuProfile, "cpuProfile", "", "Write cpu profile to file at this path")
   filteredVals := flag.String("allowFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
@@ -392,7 +394,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         // the bitSize == 64 allows us to round properly past 6 s.f
         // Note: 'G' requires these numbers to be < 0 for proper precision
         // (elase only 6 s.f total, rather than after decimal)
-        output.WriteString(strconv.FormatFloat(float64(len(hets)) / effectiveSamples, 'G', 4, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(hets)) / effectiveSamples, 'G', 3, 64))
       }
 
       output.WriteString("\t")
@@ -406,7 +408,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(homs, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(homs)) / effectiveSamples, 'G', 4, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(homs)) / effectiveSamples, 'G', 3, 64))
       }
 
       output.WriteString("\t")
@@ -420,7 +422,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       } else {
         output.WriteString(strings.Join(missing, fieldDelimiter))
         output.WriteString("\t")
-        output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', 4, 64))
+        output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', 3, 64))
       }
 
       // Write the sample minor allele frequency
@@ -434,7 +436,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       if sampleMaf == 0 {
         output.WriteString("0")
       } else {
-        output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 4, 64))
+        output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 3, 64))
       }
 
       if keepId == true {
