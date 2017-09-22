@@ -256,8 +256,8 @@ func TestPassesLine(t *testing.T) {
 	//Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
 	record := []string{"20", "4", ".", "GCG", "G,GCGCG", ".", "PASS", "DP=100"}
 
-	keepFiltered := map[string]bool{ "PASS": true, ".": true}
-	actual := linePasses(record, header, keepFiltered)
+	allowedFilters := map[string]bool{ "PASS": true, ".": true}
+	actual := linePasses(record, header, allowedFilters)
 
 	if actual == expect {
 		t.Log("OK: PASS lines pass")
@@ -267,7 +267,7 @@ func TestPassesLine(t *testing.T) {
 
 	record = []string{"20", "4", ".", "GCG", "G,GCGCG", ".", ".", "DP=100"}
 
-	actual = linePasses(record, header, keepFiltered)
+	actual = linePasses(record, header, allowedFilters)
 
 	if actual == expect {
 		t.Log("OK: lines with missing (.) values under FILTER pass")
@@ -1666,12 +1666,12 @@ func TestOutputMultiallelic(t *testing.T) {
 	record := strings.Join([]string{"20", "4", ".", "GCACG", "G,GTCACACG", ".", "PASS", "DP=100",
 	"GT", "0|0", "0|1", "2|2", ".|."}, "\t")
 
-	keepFiltered := map[string]bool{ "PASS": true, ".": true}
+	allowedFilters := map[string]bool{ "PASS": true, ".": true}
 
 	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
 	reader := bufio.NewReader(strings.NewReader(lines))
 
-	config := Config{emptyField: "!", fieldDelimiter: ";", keepFiltered: keepFiltered}
+	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters}
 
 	index := -1
   readVcf(&config, reader, func(row string) {
@@ -1816,12 +1816,12 @@ func TestOutputComplexMultiDel(t *testing.T) {
 	record := strings.Join([]string{"16", "84034434", "rs141446650", "GAGGGAGACAGAGGGAAGT",
 		"G,GGGGAGACAGAGGGAAGT", ".", "PASS", "DP=100"}, "\t")
 
-	keepFiltered := map[string]bool{ "PASS": true, ".": true}
+	allowedFilters := map[string]bool{ "PASS": true, ".": true}
 
 	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
 	reader := bufio.NewReader(strings.NewReader(lines))
 
-	config := Config{emptyField: "!", fieldDelimiter: ";", keepFiltered: keepFiltered}
+	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters}
 
 	index := -1;
 
@@ -1890,12 +1890,12 @@ func TestOutputComplexDel(t *testing.T) {
 		"CCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,GCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT,C,CTCCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT",
 		".", "PASS", "DP=100"}, "\t")
 
-	keepFiltered := map[string]bool{ "PASS": true, ".": true}
+	allowedFilters := map[string]bool{ "PASS": true, ".": true}
 
 	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
 	reader := bufio.NewReader(strings.NewReader(lines))
 
-	config := Config{emptyField: "!", fieldDelimiter: ";", keepFiltered: keepFiltered}
+	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters}
 
 	index := -1;
   readVcf(&config, reader, func(row string) {
@@ -1946,4 +1946,97 @@ func TestOutputComplexDel(t *testing.T) {
 	} else {
 		t.Error("expected 4 alleles")
 	}
+}
+
+func TestOutputMultiallelicSnp(t *testing.T) {
+  versionLine := "##fileformat=VCFv4.x"
+  header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+    "FILTER", "INFO"}, "\t")
+  //Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
+  //Test from 1000 genomes
+  record := strings.Join([]string{"1", "1265061", "rs138351882;rs563042459",
+    "CGT", "TGT,C", ".", "PASS", "DP=100"}, "\t")
+
+  allowedFilters := map[string]bool{ "PASS": true, ".": true}
+
+  lines := versionLine + "\n" + header + "\n" + record  + "\n"
+  reader := bufio.NewReader(strings.NewReader(lines))
+
+  config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters}
+
+  index := -1;
+  readVcf(&config, reader, func(row string) {
+    index++
+
+    resultRow := strings.Split(row[:len(row)-1], "\t")
+
+    if resultRow[0] != "chr1" {
+      t.Error("chromosome should have chr appended", resultRow)
+    }
+
+    fmt.Println(index, resultRow)
+    if index == 0 {
+      if resultRow[refIdx] == "C" && resultRow[posIdx] == "1265061" && resultRow[altIdx] == "T" {
+        t.Log("OK: Complex SNP in multiallelic SNP/DEL annotated correctly", resultRow)
+      } else {
+        t.Error("NOT OK: Complex SNP in multiallelic SNP/DEL annotated correctly", resultRow)
+      }
+    }
+
+    if index == 1 {
+      if resultRow[refIdx] == "G" && resultRow[posIdx] == "1265062" && resultRow[altIdx] == "-2" {
+          t.Log("OK: DEL in multiallelic SNP/DEL annotated correctly", resultRow)
+      } else {
+        t.Error("NOT OK: DEL in multiallelic SNP/DEL not annotated correctly", resultRow)
+      }
+    }
+  })
+
+  if index == 1 {
+    t.Log("Ok, recapitulated 4 alleles")
+  } else {
+    t.Error("expected 4 alleles")
+  }
+}
+
+func TestComplexSnp(t *testing.T) {
+  versionLine := "##fileformat=VCFv4.x"
+  header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+    "FILTER", "INFO"}, "\t")
+  //Test example 5.2.4 https://samtools.github.io/hts-specs/VCFv4.2.pdf
+  //Hypothetical, where a silly site lists the T->C 2 bases before it occurs
+  record := strings.Join([]string{"1", "1265062", "rs138351882;rs563042459",
+    "CGT", "CGA", ".", "PASS", "DP=100"}, "\t")
+
+  allowedFilters := map[string]bool{ "PASS": true, ".": true}
+
+  lines := versionLine + "\n" + header + "\n" + record  + "\n"
+  reader := bufio.NewReader(strings.NewReader(lines))
+
+  config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters}
+
+  index := -1;
+  readVcf(&config, reader, func(row string) {
+    index++
+
+    resultRow := strings.Split(row[:len(row)-1], "\t")
+
+    if resultRow[0] != "chr1" {
+      t.Error("chromosome should have chr appended", resultRow)
+    }
+
+    if index == 0 {
+      if resultRow[refIdx] == "T" && resultRow[posIdx] == "1265064" && resultRow[altIdx] == "A" {
+        t.Log("OK: Complex SNP annotated correctly", resultRow)
+      } else {
+        t.Error("NOT OK: Complex SNP not annotated correctly", resultRow)
+      }
+    }
+  })
+
+  if index == 0 {
+    t.Log("Ok, recapitulated 1 alleles")
+  } else {
+    t.Error("expected 1 alleles")
+  }
 }

@@ -35,7 +35,7 @@ type Config struct {
   keepInfo bool
   //keepQual bool
   cpuProfile string
-  keepFiltered map[string]bool
+  allowedFilters map[string]bool
 }
 
 func setup(args []string) *Config {
@@ -48,8 +48,8 @@ func setup(args []string) *Config {
   //flag.BoolVar(&config.keepQual, "keepQual", false, "Retain the QUAL field in output")
   flag.BoolVar(&config.keepInfo, "keepInfo", false, "Retain INFO field in output (2 appended output fields: allele index and the INFO field. Will appear after id field if --keepId flag set.")
   flag.StringVar(&config.cpuProfile, "cpuProfile", "", "Write cpu profile to file at this path")
-  filteredVals := flag.String("allowFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
-  excludeFilterVals := flag.String("excludeFilter", "", "Exclude rows that have this FILTER value (comma separated)")
+  allowedFilterVals := flag.String("allowFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
+  excludedFilterVals := flag.String("excludeFilter", "", "Exclude rows that have this FILTER value (comma separated)")
   // allows args to be mocked https://github.com/nwjlyons/email/blob/master/inputs.go
   // can only run 1 such test, else, redefined flags error
   a := os.Args[1:]
@@ -57,15 +57,15 @@ func setup(args []string) *Config {
     a = args
   }
   flag.CommandLine.Parse(a)
-  config.keepFiltered = map[string]bool{"PASS": true, ".": true}
-  if *filteredVals != "" {
-    for _, val := range strings.Split(*filteredVals, ",") {
-      config.keepFiltered[val] = true
+  config.allowedFilters = map[string]bool{"PASS": true, ".": true}
+  if *allowedFilterVals != "" {
+    for _, val := range strings.Split(*allowedFilterVals, ",") {
+      config.allowedFilters[val] = true
     }
   }
-  if *excludeFilterVals != "" {
-    for _, val := range strings.Split(*excludeFilterVals, ",") {
-      config.keepFiltered[val] = false
+  if *excludedFilterVals != "" {
+    for _, val := range strings.Split(*excludedFilterVals, ",") {
+      config.allowedFilters[val] = false
     }
   }
   return config
@@ -238,7 +238,7 @@ func readVcf (config *Config, reader *bufio.Reader, resultFunc func(row string))
   // Now read them all off, concurrently.
   for i := 0; i < concurrency; i++ {
     go processLines(header, config.emptyField, config.fieldDelimiter, config.keepId,
-      config.keepInfo, config.keepFiltered, workQueue, results, complete)
+      config.keepInfo, config.allowedFilters, workQueue, results, complete)
   }
 
   // Wait for everyone to finish.
