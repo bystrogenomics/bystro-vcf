@@ -764,18 +764,30 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 
   // MULTI is basically the presence of a comma
   // We don't just look at the length of the resulting alleles or references or indexes
-  // slices, because these can include MNPs, which are technically SNPs
+  // slices, because these can include MNPs, which expand the array size, but are
+  // somewhat distinct in their meaning
   if multi {
     return parse.Multi, positions, references, alleles, indexes
   }
 
-  // Anything below here is guaranteed to be of 1 annotation type
-  if alleles[0][0] == '-' {
-    return parse.Del, positions, references, alleles, indexes
+  // Anything below here is guaranteed to be a single allele from the VCF file
+  // whether that is an MNP, DEL, INS, or SNP
+  if len(alleles[0]) > 1 {
+    if alleles[0][0] == '-' {
+      return parse.Del, positions, references, alleles, indexes
+    }
+
+    return parse.Ins, positions, references, alleles, indexes
   }
 
-  if alleles[0][0] == '+' {
-    return parse.Ins, positions, references, alleles, indexes
+  // MNPs result in multiple alleles
+  // They may be sparse or complete, so we empirically check for their presence
+  // If the MNP is really just a snp, there is only 1 allele, and reduces to snp
+  // > 1, these are labeled differently to allow people to jointly consider the effects
+  // of the array of SNPs, since we at the moment consider their effects only independently
+  // (which has advantages for CADD, phyloP, phastCons, clinvar, etc reporting)
+  if len(alleles) > 1 {
+    return parse.Mnp, positions, references, alleles, indexes
   }
 
   // MNPs and SNPs are both labeled SNP

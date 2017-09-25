@@ -160,7 +160,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	}
 
 	/******************** Test contiguous MNPs ***************/
-	expType = "SNP"
+	expType = "MNP"
 	expRefs := []byte{'T', 'C', 'G', 'T'}
 	expAlts := []string{"G", "T", "A", "A"}
 	expPositions := []string{"100", "101", "102", "103"}
@@ -171,9 +171,9 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	test = "Supports MNPs"
 	// TODO: Should we call MNPs SNP or MNP?
 	if sType != expType {
-		t.Errorf("NOT OK: %s : MNPs should be labeled 'SNP'", test, sType, expType)
+		t.Errorf("NOT OK: %s : MNPs should be labeled 'MNP' if they have > 1 allele", test, sType, expType)
 	} else {
-		t.Logf("OK: %s : MNPs should be labeled 'SNP'", test)
+		t.Logf("OK: %s : MNPs should be labeled 'MNP' if they have > 1 allele", test)
 	}
 
 	if len(altIndices) != 4 {
@@ -192,7 +192,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	/******************** Test sparse MNPs ***************/
 	// not certain if these are possible, but will be annotated correctly
-	expType = "SNP"
+	expType = "MNP"
 	expRefs = []byte{'C', 'T'}
 	expAlts = []string{"A", "C"}
 	expPositions = []string{"101", "103"}
@@ -204,9 +204,9 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 
 	// TODO: Should we call MNPs SNP or MNP?
 	if sType != expType {
-		t.Errorf("NOT OK: %s : MNPs should be labeled 'SNP'", test, sType, expType)
+		t.Errorf("NOT OK: %s : MNPs should be labeled 'MNP' if they have > 1 allele", test, sType, expType)
 	} else {
-		t.Logf("OK: %s : MNPs should be labeled 'SNP'", test)
+		t.Logf("OK: %s : MNPs should be labeled 'MNP' if they have > 1 allele", test)
 	}
 
 	if len(altIndices) != 2 {
@@ -223,6 +223,39 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 		}
 	}
 
+	/******************** Test MNP-like SNP***************/
+	// not certain if these are possible, but will be annotated correctly
+	expType = "SNP"
+	expRefs = []byte{'T'}
+	expAlts = []string{"C"}
+	expPositions = []string{"103"}
+	// indices are relative to the VCF order; 1 MNP is 1 allele
+	expIndices = []int{0}
+
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TCGT", "TCGC")
+	test = "Supports SNPs that are reported as an N-long block"
+
+	if sType != expType {
+		t.Errorf("NOT OK: %s : sites should be labeled 'SNP' if they have only 1 change, that is a single base", test, sType, expType)
+	} else {
+		t.Logf("OK: %s : sites should be labeled 'SNP' if they have only 1 change, that is a single base", test)
+	}
+
+	if len(altIndices) != 1 {
+		t.Errorf("NOT OK: %s : SNPs that are reported as N-block should have only 1 allele", test)
+	} else {
+		t.Logf("OK: %s : SNPs that are reported as N-block should have only 1 allele", test)
+	}
+
+	for i := 0; i < len(altIndices); i++ {
+		if pos[i] != expPositions[i] || refs[i] != expRefs[i] || alts[i] != expAlts[i] || altIndices[i] != expIndices[i] {
+			t.Errorf("NOT OK: %s : mangled long-SNP annotation", test, sType, pos, refs, alts)
+		} else {
+			t.Logf("OK: %s : correct long-SNP annotation", test)
+		}
+	}
+
+	/******************** Test simple 1 base deletion ***************/
 	expType, exPos, expRef, expAlt = "DEL", "101", byte('C'), "-1"
 
 	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TC", "T")
