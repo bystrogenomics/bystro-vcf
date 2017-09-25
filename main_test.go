@@ -112,140 +112,198 @@ func TestHeader(t *testing.T) {
 }
 
 func TestUpdateFieldsWithAlt(t *testing.T) {
-	expType, exPos, expRef, expAlt := "SNP", "100", "T", "C"
+	expType, exPos, expRef, expAlt := "SNP", "100", byte('T'), "C"
 
-	sType, pos, ref, alt, err := updateFieldsWithAlt("T", "C", "100", false)
+	sType, pos, refs, alts, altIndices := getAlleles("chr1", "100", "T", "C")
+	test := "Has alt indices"
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
+	if len(altIndices) != 1 && altIndices[1] != 0 {
+		t.Errorf("NOT OK: %s", test)
+	} else {
+		t.Logf("OK: %s", test)
+	}
+
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
 		t.Error("NOT OK: Test failed")
 	} else {
 		t.Log("OK: SNP")
 	}
 
-	expType, exPos, expRef, expAlt = "SNP", "103", "T", "A"
+	expType, exPos, expRef, expAlt = "SNP", "103", byte('T'), "A"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "TCCA", "100", false)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TCCT", "TCCA")
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos, refs, alts)
 	} else {
 		t.Log("OK: SNPs that are longer than 1 base are suported when SNP at end")
 	}
 
-	expType, exPos, expRef, expAlt = "SNP", "102", "C", "A"
+	expType, exPos, expRef, expAlt = "SNP", "102", byte('C'), "A"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "TGAT", "100", false)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TGCT", "TGAT")
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos, refs, alts)
 	} else {
 		t.Log("OK: SNPs that are longer than 1 base are suported when SNP in middle")
 	}
 
-	expType, exPos, expRef, expAlt = "SNP", "100", "T", "A"
+	expType, exPos, expRef, expAlt = "SNP", "100", byte('T'), "A"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TGCT", "AGCT", "100", false)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TGCT", "AGCT")
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos, refs, alts)
 	} else {
 		t.Log("OK: SNPs that are longer than 1 base are suported when SNP at beginning")
 	}
 
-	expType, exPos, expRef, expAlt = "", "", "", ""
+	/******************** Test contiguous MNPs ***************/
+	expType = "SNP"
+	expRefs := []byte{'T', 'C', 'G', 'T'}
+	expAlts := []string{"G", "T", "A", "A"}
+	expPositions := []string{"100", "101", "102", "103"}
+	// indices are relative to the VCF order; 1 MNP is 1 allele
+	expIndices := []int{0, 0, 0, 0}
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TCCT", "GTAA", "100", false)
-
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TCGT", "GTAA")
+	test = "Supports MNPs"
+	// TODO: Should we call MNPs SNP or MNP?
+	if sType != expType {
+		t.Errorf("NOT OK: %s : MNPs should be labeled 'SNP'", test, sType, expType)
 	} else {
-		t.Log("OK: MNPs are not supported")
+		t.Logf("OK: %s : MNPs should be labeled 'SNP'", test)
 	}
 
-	expType, exPos, expRef, expAlt = "DEL", "101", "C", "-1"
+	if len(altIndices) != 4 {
+		t.Errorf("NOT OK: %s : All MNP alleles should be reported", test)
+	} else {
+		t.Logf("OK: %s : All MNP alleles should be reported", test)
+	}
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TC", "T", "100", false)
+	for i := 0; i < len(altIndices); i++ {
+		if pos[i] != expPositions[i] || refs[i] != expRefs[i] || alts[i] != expAlts[i] || altIndices[i] != expIndices[i] {
+			t.Errorf("NOT OK: %s : mangled MNP annotation", test, sType, pos, refs, alts)
+		} else {
+			t.Logf("OK: %s : correct MNP annotation", test)
+		}
+	}
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	/******************** Test sparse MNPs ***************/
+	// not certain if these are possible, but will be annotated correctly
+	expType = "SNP"
+	expRefs = []byte{'C', 'T'}
+	expAlts = []string{"A", "C"}
+	expPositions = []string{"101", "103"}
+	// indices are relative to the VCF order; 1 MNP is 1 allele
+	expIndices = []int{0, 0}
+
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TCGT", "TAGC")
+	test = "Supports sparse MNPs"
+
+	// TODO: Should we call MNPs SNP or MNP?
+	if sType != expType {
+		t.Errorf("NOT OK: %s : MNPs should be labeled 'SNP'", test, sType, expType)
+	} else {
+		t.Logf("OK: %s : MNPs should be labeled 'SNP'", test)
+	}
+
+	if len(altIndices) != 2 {
+		t.Errorf("NOT OK: %s : All MNP alleles should be reported", test)
+	} else {
+		t.Logf("OK: %s : All MNP alleles should be reported", test)
+	}
+
+	for i := 0; i < len(altIndices); i++ {
+		if pos[i] != expPositions[i] || refs[i] != expRefs[i] || alts[i] != expAlts[i] || altIndices[i] != expIndices[i] {
+			t.Errorf("NOT OK: %s : mangled MNP annotation", test, sType, pos, refs, alts)
+		} else {
+			t.Logf("OK: %s : correct MNP annotation", test)
+		}
+	}
+
+	expType, exPos, expRef, expAlt = "DEL", "101", byte('C'), "-1"
+
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TC", "T")
+
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos, refs, alts)
 	} else {
 		t.Log("OK: 1-based deletions ")
 	}
 
-	expType, exPos, expRef, expAlt = "DEL", "101", "A", "-5"
+	expType, exPos, expRef, expAlt = "DEL", "101", byte('A'), "-5"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCGT", "T", "100", false)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TAGCGT", "T")
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos, refs, alts)
 	} else {
 		t.Log("OK: Deletions with references longer than 2 bases")
 	}
 
 	// Test multiallelic intercolated deletion
-	expType, exPos, expRef, expAlt = "DEL", "101", "A", "-4"
+	expType, exPos, expRef, expAlt = "DEL", "102", byte('G'), "-4"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TA", "100", true)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TAGCTT", "TA")
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos[0], string(refs[0]), alts[0])
 	} else {
 		t.Log("OK: Deletions longer than 1 base")
 	}
 
-	// If not multiallelic, the same deletion should be skipped, as it is odd,
-	// and the position doesn't make sense
-	expType, exPos, expRef, expAlt = "", "", "", ""
+	//Check a malformed allele
+	expType, exPos, expRef, expAlt = "", "", 0, ""
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TA", "100", false)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TAGCTT", "TAC")
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || len(pos) != 0 || len(refs) != 0 || len(alts) != 0 {
+		t.Error("NOT OK: expect ref:TAGCTT alt:TAC to return 0 alleles", sType, pos, refs, alts)
 	} else {
-		t.Log("OK: Deletions longer than 1 base")
+		t.Log("OK: expected ref:TAGCTT alt:TAT to return 0 allele")
 	}
 
-	expType, exPos, expRef, expAlt = "", "", "", ""
+	//Check an intercolated deletion
+	expType, exPos, expRef, expAlt = "DEL", "102", byte('G'), "-3"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TAGCTT", "TAC", "100", false)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TAGCTT", "TAT")
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if len(pos) != 1 || len(refs) != 1 || len(alts) != 1 || len(altIndices) != 1 {
+		t.Error("NOT OK: expected ref:TAGCTT alt:TAT to return 1 intercolated allele", sType, pos, refs, alts)
 	} else {
-		t.Log("OK: Left edge of deletion must match exactly")
+		t.Log("OK: expected ref:TAGCTT alt:TAT to return 1 intercolated allele")
 	}
 
-	expType, exPos, expRef, expAlt = "INS", "100", "T", "+AGCTT"
-
-	sType, pos, ref, alt, err = updateFieldsWithAlt("T", "TAGCTT", "100", false)
-
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: expect ref:TAGCTT alt:TAC to be pos:102, ref:G, alt:-3", sType, pos, refs, alts)
 	} else {
-		t.Log("OK: Insertions where reference is 1 base long")
+		t.Log("OK: expect ref:TAGCTT alt:TAC to be pos:102, ref:G, alt:-3")
 	}
 
-	// Test multiallelic
-	// say came from TT T, TAGCTT
-	// I believe the answer is, this should be a +AGCT in between then two T's
-	expType, exPos, expRef, expAlt = "INS", "100", "T", "+AGCT"
+	expType, exPos, expRef, expAlt = "INS", "100", byte('T'), "+AGCTT"
 
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TT", "TAGCTT", "100", true)
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "T", "TAGCTT")
+	
+	test = "Insertions where reference is 1 base long"
 
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Errorf("NOT OK: %s", test, sType, pos, refs, alts)
+	} else {
+		t.Logf("OK: %s", test)
+	}
+
+	// Test intercolated insertions
+	expType, exPos, expRef, expAlt = "INS", "100", byte('T'), "+AGCT"
+	test = "Intercolated insertions"
+
+	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "TT", "TAGCTT")
+
+	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
+		t.Error("NOT OK: Test failed", sType, pos, string(refs[0]), alts)
 	} else {
 		t.Log("OK: Multiallelics insertion where reference is 2 bases long")
-	}
-
-	expType, exPos, expRef, expAlt = "", "", "", ""
-
-	sType, pos, ref, alt, err = updateFieldsWithAlt("TT", "TAGCTT", "100", false)
-
-	if err != nil || sType != expType || pos != exPos || ref != expRef || alt != expAlt {
-		t.Error("NOT OK: Test failed", sType, pos, ref, alt)
-	} else {
-		t.Log("OK: Non-multiallelic insertions, whose ref are 2 bases long are skipped")
 	}
 }
 
@@ -1689,9 +1747,9 @@ func TestOutputMultiallelic(t *testing.T) {
 
   	if index == 0 {
   		if resultRow[altIdx] == "-4" && resultRow[posIdx] == "5" && resultRow[refIdx] == "C" {
-  			t.Log("OK: 2 base deletion recapitulated", resultRow)
+  			t.Log("OK: 4 base deletion recapitulated", resultRow)
   		} else {
-  			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
+  			t.Error("NOT OK: 4 base deletion not recapitulated", resultRow)
   		}
 			
 			if resultRow[6] == "Sample2" {
@@ -1745,9 +1803,9 @@ func TestOutputMultiallelic(t *testing.T) {
 
 		if index == 1 {
   		if resultRow[altIdx] == "+TCA" && resultRow[posIdx] == "4" && resultRow[refIdx] == "G" {
-  			t.Log("OK: 2 base deletion recapitulated", resultRow)
+  			t.Log("OK: 3 base insertion recapitulated", resultRow)
   		} else {
-  			t.Error("NOT OK: 2 base deletion not recapitulated", resultRow)
+  			t.Error("NOT OK: 3 base insertion not recapitulated", resultRow)
   		}
 
   		if resultRow[6] == config.emptyField {
@@ -2038,5 +2096,72 @@ func TestComplexSnp(t *testing.T) {
     t.Log("Ok, recapitulated 1 alleles")
   } else {
     t.Error("expected 1 alleles")
+  }
+}
+
+func TestMNP(t *testing.T) {
+  versionLine := "##fileformat=VCFv4.x"
+  header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+    "FILTER", "INFO"}, "\t")
+  //Hypothetical 
+  record := strings.Join([]string{"1", "1000", "rs138351882;rs563042459",
+    "ACGT", "GATC", ".", "PASS", "DP=100"}, "\t")
+
+  test := "Finds MNPs"
+
+  allowedFilters := map[string]bool{ "PASS": true, ".": true}
+
+  lines := versionLine + "\n" + header + "\n" + record  + "\n"
+  reader := bufio.NewReader(strings.NewReader(lines))
+
+  config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters}
+
+  index := -1;
+  readVcf(&config, reader, func(row string) {
+    index++
+
+    resultRow := strings.Split(row[:len(row)-1], "\t")
+
+    if resultRow[0] != "chr1" {
+      t.Error("chromosome should have chr appended", resultRow)
+    }
+
+    if index == 0 {
+      if resultRow[refIdx] == "A" && resultRow[posIdx] == "1000" && resultRow[altIdx] == "G" {
+        t.Logf("OK: %s", test)
+      } else {
+        t.Errorf("NOT OK: %s", test, resultRow)
+      }
+    }
+
+    if index == 1 {
+      if resultRow[refIdx] == "C" && resultRow[posIdx] == "1001" && resultRow[altIdx] == "A" {
+        t.Logf("OK: %s", test)
+      } else {
+        t.Errorf("NOT OK: %s", test, resultRow)
+      }
+    }
+
+    if index == 2 {
+      if resultRow[refIdx] == "G" && resultRow[posIdx] == "1002" && resultRow[altIdx] == "T" {
+        t.Logf("OK: %s", test)
+      } else {
+        t.Errorf("NOT OK: %s", test, resultRow)
+      }
+    }
+
+    if index == 3 {
+      if resultRow[refIdx] == "T" && resultRow[posIdx] == "1003" && resultRow[altIdx] == "C" {
+        t.Logf("OK: %s", test)
+      } else {
+        t.Errorf("NOT OK: %s", test, resultRow)
+      }
+    }
+  })
+
+  if index == 3 {
+    t.Logf("OK: %s", test)
+  } else {
+    t.Errorf("NOT OK: %s", test)
   }
 }

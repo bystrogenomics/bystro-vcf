@@ -26,6 +26,19 @@ const filterIdx int = 6
 const infoIdx int = 7
 const formatIdx int = 8
 
+const insError1 string = "1st base ALT != REF"
+const delError1 string = "1st base REF != ALT"
+const badPrefixError string = "No shared suffix && prefix doesn't match"
+const sameError string = "REF == ALT"
+const missError string = "ALT == '.'"
+const posError string = "Invalid POS"
+const badAltError string = "ALT not ACTG"
+const mixedError string = "Mixed indel/snp sites not supported"
+const complexNotice string = "Complex site"
+
+const noticeLvl string = "Notice: "
+const errorLvl string = "Error: "
+
 type Config struct {
   inPath string
   errPath string
@@ -48,8 +61,8 @@ func setup(args []string) *Config {
   //flag.BoolVar(&config.keepQual, "keepQual", false, "Retain the QUAL field in output")
   flag.BoolVar(&config.keepInfo, "keepInfo", false, "Retain INFO field in output (2 appended output fields: allele index and the INFO field. Will appear after id field if --keepId flag set.")
   flag.StringVar(&config.cpuProfile, "cpuProfile", "", "Write cpu profile to file at this path")
-  allowedFilterVals := flag.String("allowFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
-  excludedFilterVals := flag.String("excludeFilter", "", "Exclude rows that have this FILTER value (comma separated)")
+  filteredVals := flag.String("allowFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
+  excludeFilterVals := flag.String("excludeFilter", "", "Exclude rows that have this FILTER value (comma separated)")
   // allows args to be mocked https://github.com/nwjlyons/email/blob/master/inputs.go
   // can only run 1 such test, else, redefined flags error
   a := os.Args[1:]
@@ -58,13 +71,13 @@ func setup(args []string) *Config {
   }
   flag.CommandLine.Parse(a)
   config.allowedFilters = map[string]bool{"PASS": true, ".": true}
-  if *allowedFilterVals != "" {
-    for _, val := range strings.Split(*allowedFilterVals, ",") {
+  if *filteredVals != "" {
+    for _, val := range strings.Split(*filteredVals, ",") {
       config.allowedFilters[val] = true
     }
   }
-  if *excludedFilterVals != "" {
-    for _, val := range strings.Split(*excludedFilterVals, ",") {
+  if *excludeFilterVals != "" {
+    for _, val := range strings.Split(*excludeFilterVals, ",") {
       config.allowedFilters[val] = false
     }
   }
@@ -296,7 +309,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
     log.Printf("Found 9 header fields. When genotypes present, we expect 1+ samples after FORMAT (10 fields minimum)")
   }
 
-  runeLookup := []rune {'1','2','3','4','5','6','7','8','9'}
+  iLookup := []rune {'1','2','3','4','5','6','7','8','9'}
 
   for line := range queue {
     record := strings.Split(line, "\t")
@@ -305,36 +318,23 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       continue
     }
 
-    alleles = strings.Split(record[altIdx], ",")
-    multiallelic = len(alleles) > 1
+    siteType, positions, refs, alts, altIndices := getAlleles(record[chromIdx], record[posIdx], record[refIdx], record[altIdx])
 
-    // Currently limited to 9 alleles + 1 ref max
-    if len(alleles) > 9 {
-      log.Printf("%s:%s: We currently don't support sites with > 9 minor alleles, found %d", record[chromIdx], record[posIdx], len(alleles))
+    multiallelic = siteType == parse.Multi
+
+    // if last index > 9 then we can't accept the site, since won't be able
+    // to identify het/hom status
+    if altIndices[len(altIndices) - 1] > 9 {
+      log.Printf("%s %s:%s: We currently don't support sites with > 9 minor alleles, found %d", record[chromIdx], record[posIdx], errorLvl, len(alleles))
       continue
     }
 
-    for idx, allele := range alleles {
-      if altIsValid(allele) == false {
-        log.Printf("%s:%s Skip ALT #%d (not ACTG)", record[chromIdx], record[posIdx], idx+1)
-        continue
-      }
-
-      siteType, pos, ref, alt, err := updateFieldsWithAlt(record[refIdx], allele, record[posIdx], multiallelic)
-
-      if err != nil {
-        log.Fatal(err)
-      }
-
-      if pos == "" {
-        log.Printf("%s:%s Skip ALT #%d (complex)", record[chromIdx], record[posIdx], idx+1)
-        continue
-      }
+    for i, _ := range alts {
 
       // If no samples are provided, annotate what we can, skipping hets and homs
       // If samples are provided, but only missing genotypes, skip the site altogether
       if numSamples > 0 {
-        homs, hets, missing, sampleMaf = makeHetHomozygotes(record, header, runeLookup[idx])
+        homs, hets, missing, sampleMaf = makeHetHomozygotes(record, header, iLookup[altIndices[i]])
 
         if len(homs) == 0 && len(hets) == 0 {
           continue
@@ -354,25 +354,21 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
 
       output.WriteString(record[chromIdx])
       output.WriteString("\t")
-      output.WriteString(pos)
+      output.WriteString(positions[i])
       output.WriteString("\t")
 
-      if multiallelic {
-        output.WriteString("MULTIALLELIC")
-      } else {
-        output.WriteString(siteType)
-      }
+      output.WriteString(siteType)
 
       output.WriteString("\t")
-      output.WriteString(ref)
+      output.WriteByte(refs[i])
       output.WriteString("\t")
-      output.WriteString(alt)
+      output.WriteString(alts[i])
       output.WriteString("\t")
 
       if(multiallelic) {
         output.WriteString(parse.NotTrTv)
       } else {
-        output.WriteString(parse.GetTrTv(ref, alt))
+        output.WriteString(parse.GetTrTv(string(refs[i]), alts[i]))
       }
 
       output.WriteString("\t")
@@ -447,7 +443,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
       if keepInfo == true {
         // Write the index of the allele, to allow users to segregate data in the INFO field
         output.WriteString("\t")
-        output.WriteString(strconv.Itoa(idx))
+        output.WriteString(strconv.Itoa(altIndices[i]))
         output.WriteString("\t")
         // INFO index is 7
         output.WriteString(record[infoIdx])
@@ -463,117 +459,319 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
   complete <- true
 }
 
-func updateFieldsWithAlt(ref string, alt string, pos string, multiallelic bool) (string, string, string, string, error) {
-  /*********************** SNPs *********************/
-  if len(alt) == len(ref) {
-    if alt == ref {
-      // No point in returning ref sites
-      return "", "", "", "", nil
+// @returns type, pos []string, ref []byte, alt []string, altIndices []int
+// ref is always 1 base
+// could return error object, but logging works as well, and seems cheaper
+func getAlleles(chrom string, pos string, ref string, alt string) (string, []string, []byte, []string, []int) {
+  // First check the simple cases, for performance reasons
+  if alt == ref {
+    // No point in returning ref sites
+    log.Printf("%s %s:%s : %s\n", errorLvl, chrom, pos, sameError)
+    return "", nil, nil, nil, nil
+  }
+
+  // optimize for the cases where no "," could be present, i.e len(alt) == 1
+  if len(alt) == 1 {
+    if alt != "A" && alt != "C" && alt != "G" && alt != "T" {
+      log.Printf("%s %s:%s ALT #1 %s\n", noticeLvl, chrom, pos, badAltError)
+
+      return "", nil, nil, nil, nil
     }
 
-    if len(ref) > 1 {
-      // SNPs that are multiallelic with indels, can be longer than 1 base long
-      // Confusingly enough, so can MNPs
-      // So, we will check for both
-      if ref[0] != alt[0] && ref[1] != alt[1]{
-        // This is most likely an MNP
-        // As MNPs are contiguous
-        // Currently we haven't enabled MNP parsing in the caller
-        return "", "", "", "", nil
+    if len(ref) == 1 {
+      return parse.Snp, []string{pos}, []byte{ref[0]}, []string{alt}, []int{0}
+    }
+
+    // simple deletion must have 1 base padding match
+    if alt[0] != ref[0] {
+      log.Printf("%s %s:%s ALT #1 %s", errorLvl, chrom, pos, delError1)
+      return "", nil, nil, nil, nil
+    }
+
+    intPos, err := strconv.Atoi(pos)
+
+    if err != nil {
+      log.Printf("%s %s:%s ALT #1 %s", errorLvl, chrom, pos, posError)
+      return "", nil, nil, nil, nil
+    }
+
+    // pos is the next base over (first deleted base)
+    // ref is also the first deleted base, since alt is of 1 padding, that's idx 1/ 2nd ref base
+    // alt == len(alt) - len(ref) for len(alt) < len(ref)
+    // example: alt = A (len == 1), ref = AAATCC (len == 6)
+    // 1 - 6 = -5 (then conver to string)
+    return parse.Del, []string{strconv.Itoa(intPos + 1)}, []byte{ref[1]}, []string{strconv.Itoa(1 - len(ref))}, []int{0}
+  }
+
+  // len(ref) > 1
+  // this means position errors only generated if complex
+  // consuming script will probaly also need position, and will generate its own
+  // errors
+  // we don't pad our deletions; the first deleted base is -1
+  // and the reference is that first deleted base
+  // don't modify this value, reuse
+  var intPos int
+
+  var alleles []string
+  var references []byte
+  var positions []string
+  var indexes []int
+  var multi bool
+  for altIdx, tAlt := range strings.Split(alt, ",") {
+    // It can be a MULTIALLELIC and have errors that
+    // reduce output allele count to 1, so record here
+    if !multi && altIdx > 0 {
+      multi = true
+    }
+
+    // if a site doesn't have a valid form, like ACTG, skip it
+    if altIsValid(tAlt) == false {
+      log.Printf("%s %s:%s ALT #%d %s\n", noticeLvl, chrom, pos, altIdx + 1, badAltError)
+      continue
+    }
+
+    if len(ref) == 1 {
+      if len(tAlt) == 1 {
+        //tAlt isn't modified
+        positions = append(positions, pos)
+        references = append(references, ref[0])
+        alleles = append(alleles, tAlt)
+        indexes = append(indexes, altIdx)
+        continue
       }
 
-      diffIdx := -1
-      // Let's check each base; if there is more than 1 change, that is an error
-      for i := 0; i < len(ref); i++ {
-        if ref[i] != alt[i] {
-          // Major red flag, there should never be a len(ref) == len(alt) allele that isn't an MNP or SNP
-          // TODO: should we relax this? If we allow MNP, may as well allow sparse MNPs
-          if diffIdx > -1 {
-            return "", "", "", "", nil
-          }
+      // Simple insertion : tAlt > 1 base, and ref == 1 base 
+      if tAlt[0] != ref[0] {
+        log.Printf("%s:%s ALT #%d %s", chrom, pos, altIdx + 1, insError1)
+        continue
+      }
 
-          diffIdx = i
+      // we take the allele from the 2nd base, since insertion occurs after the reference
+      var buffer bytes.Buffer
+      buffer.WriteString("+")
+      buffer.WriteString(tAlt[1:])
+
+      // simple insertion; our annotations also use 1 base padding for insertions, so keep pos same
+      positions = append(positions, pos)
+      // since pos same, ref is just the first (only) base
+      references = append(references, ref[0])
+      alleles = append(alleles, buffer.String())
+      indexes = append(indexes, altIdx)
+
+      continue
+    }
+
+    // len(ref) > 1
+
+    // If given 0-based file, this will be re-generated potentially
+    // Notice we exit the loop here; position is invalid, should leave
+    // We convert Atoi here to avoid wasting performance
+    if intPos == 0 {
+      var err error
+      intPos, err = strconv.Atoi(pos)
+
+      if err != nil {
+        log.Printf("%s %s:%s %s", errorLvl, chrom, pos, posError)
+        break
+      }
+    }
+    
+
+    if len(tAlt) == 1 {
+      // Simple deletion, padding of 1 base, padding must match
+      if tAlt[0] != ref[0] {
+        log.Printf("%s %s:%s ALT#%d %s", errorLvl, chrom, pos, altIdx + 1, delError1)
+        continue
+      }
+
+      // 1 base deletion; we use 0 padding for deletions, showing 1st deleted base
+      // as ref; so shift pos, ref by 1, return len(ref) - 1 for alt
+      positions = append(positions, strconv.Itoa(intPos + 1))
+      references = append(references, ref[1])
+      alleles = append(alleles, strconv.Itoa(1 - len(ref)))
+      indexes = append(indexes, altIdx)
+
+      continue
+    }
+
+    // I we're here, ref and alt are both > 1 base long
+    // could be a weird SNP (multiple bases are SNPS, len(ref) == len(alt))
+    // could be a weird deletion/insertion
+    // could be a completely normal multiallelic (due to padding, shifted)
+
+    //1st check for MNPs and extra-padding SNPs
+    if len(ref) == len(tAlt) {
+      // Let's check each base; if there is more than 1 change, this is an MNP
+      // whether a sparse MNP or not.
+      // We'll report each modified base
+      for i := 0; i < len(ref); i++ {
+        if ref[i] != tAlt[i] {
+          positions = append(positions, strconv.Itoa(intPos + i))
+          references = append(references, ref[i])
+          alleles = append(alleles, string(tAlt[i]))
+
+          // Here we append the index of the VCF ALT, not the MNP idx
+          // all bases in an MNP will have the same index
+          // else we won't be able to determine homozygous, heterozygous, reference status
+          indexes = append(indexes, altIdx)
         }
       }
 
-      // Most cases are diffIdx == 0, allow us to skip 1 strconv.Atoi, 1 assignment, 1 strconv.Itoa, and 1 addition
-      if diffIdx == 0 {
-        return "SNP", pos, string(ref[diffIdx]), string(alt[diffIdx]), nil
+      continue
+    }
+
+    // Find the allele representation that minimizes padding, while still checking
+    // that the site isn't a mixed type (indel + snp) and checking for intercolation
+    // Essentially, Occam's Razor for padding: minimize the number of steps away
+    // from left edge to explan the allele
+    // EX:
+    // If ref == AATCG
+    // If alt == AG
+    // One interpretation of this site is mixed A->G -3 (-TCG)
+    // Another is -3 (-ATC) between the A (0-index) and G (4-index) in ref
+    // We prefer the latter approach
+    // Ex2: ref: TT alt: TCGATT
+    // We prefer +CGAT
+
+    // Like http://www.cureffi.org/2014/04/24/converting-genetic-variants-to-their-minimal-representation/
+    // we will use a simple heuristic:
+    // 1) For insertions, figure out the shared right edge, from 1 base downstream of first ref base
+    // Then, check if the remaining ref bases match the left edge of the alt
+    // If they don't, skip that site
+    // 2) For deletions, the same, except replace the role of ref with the tAlt
+
+    // Our method should be substantially faster, since we don't need to calculate
+    // the min(len(ref), len(tAlt))
+    // and because we don't create a new slice for every shared ref/alt at right edges and left
+
+    if len(tAlt) > len(ref) {
+      rIdx := 0
+      // we won't allow the enitre ref to match as a suffix, only up to 1 base downstream from beginning of ref
+      for len(tAlt) + rIdx > 0 && len(ref) + rIdx > 1 && tAlt[len(tAlt) + rIdx - 1] == ref[len(ref) + rIdx - 1] {
+        rIdx--
       }
 
-      intPos, _ := strconv.Atoi(pos)
-      return "SNP", strconv.Itoa(intPos + diffIdx), string(ref[diffIdx]), string(alt[diffIdx]), nil
+      // Then, we require an exact match from left edge, for the difference between the
+      // length of the ref, and the shared suffix
+      // Ex: alt: TAGCTT ref: TAT 
+      // We shared 1 base at right edge, so expect that len(ref) - 1, or 3 - 1 = 2 bases of ref
+      // match the left edge of alt
+      // Here that is TA, for an insertion of +GCT
+      // Ex2: alt: TAGCAT ref: TAT
+      // Here the AT of the ref matches the last 2 bases of alt
+      // So we expect len(ref) - 2 == 1 base of ref to match left edge of the alt (T), for +AGC
+      // Ex3: alt TAGTAT ref: TAT
+      // Since our loop doesn't check the last base of ref, as in ex2, +AGC
+      // This mean we always prefer a 1-base padding, when possible
+      // Ex4: alt TAGTAT ref: TGG
+      // In this case, we require len(ref) - 0 bases in the ref to match left edge of alt
+      // Since they don't (TAG != TGG), we call this complex and move on
+
+
+      // Insertion
+      // If pos is 100 and ref is AATCG
+      // and alt is AAAAATCG (len == 7)
+      // we expect lIdx to be 2
+      // and rIdx to be -3
+      // alt[2] is the first non-ref base
+      // and alt[len(alt) - 3] == alt[4] is the last non-ref base
+      // The position is intPos + lIdx or 100 + 2 - 1 == 101 (100, 101 are padding bases,
+      // and we want to keep the last reference base
+      // The ref is ref[2 - 1] or ref[1]
+      offset := len(ref) + rIdx
+      if ref[:offset] != tAlt[:offset] {
+        log.Printf("%s %s:%s ALT#%d %s", errorLvl, chrom, pos, altIdx + 1, mixedError)
+        continue
+      }
+
+      // position is offset by len(ref) + 1 - rIdx
+      // ex1: alt: TAGCTT ref: TAT
+      // here we match the first base, so -1
+      // we require remainder of left edge to be present,
+      // or len(ref) - 1 == 2
+      // so intPos + 2 - 1 for last padding base (the A in TA) (intPos + 2 is first unique base)
+      positions = append(positions, strconv.Itoa(intPos + offset - 1))
+      references = append(references, ref[offset - 1])
+
+      // Similarly, the alt allele starts from len(ref) + rIdx, and ends at len(tAlt) + rIdx
+      // from ex: TAGCTT ref: TAT :
+      // rIdx == -1 , real alt == tAlt[len(ref) - 1:len(tAlt) - 1] == tALt[2:5]
+      var insBuffer bytes.Buffer
+      insBuffer.WriteString("+")
+      insBuffer.WriteString(tAlt[offset:len(tAlt) + rIdx])
+
+      alleles = append(alleles, insBuffer.String())
+      indexes = append(indexes, altIdx)
+
+      continue
     }
 
-    return "SNP", pos, ref, alt, nil
+    // Deletion
+    // If pos is 100 and alt is AATCG
+    // and ref is AAAAATCG (len == 7)
+    // we expect lIdx to be 2
+    // and rIdx to be -3
+    // and alt is -3 or len(ref) + rIdx - lIdx == 8 + -3 - 2
+    // position is the first deleted base, or intPos + lIdx == 100 + 2 == 102
+    // where (100, 101) are the two padding bases
+    // ref is the first deleted base or ref[lIdx] == ref[2]
+
+    // Just like insertion, but try to match all bases from 1 base downstream of tAlt to ref
+    rIdx := 0
+    // we won't allow the enitre ALT to match as a suffix
+    // this is the inverse of the insertion case
+    // can have an intercolated deletion, where some bases in middle of deletion are missing w.r.t ref
+    // or deletions where teh entire left edge of the alt match the ref
+    for len(tAlt) + rIdx > 1 && len(ref) + rIdx > 0 && tAlt[len(tAlt) + rIdx - 1] == ref[len(ref) + rIdx - 1] {
+      rIdx--
+    }
+
+    //ex: if post: 100 alt: AATCG and ref: AAAAATCG, we expect deletion to 
+    //occurs on base 101, alt: -AAAA == -4 == -(len(ref) - 3 - (len(tAlt) - 3)) == -8 - 3 - 2 = -3
+    //rIdx is 3 since matches 3 bases
+    //position gets shifted by len(tAlt) + rIdx, since we don't want any padding in our output
+    offset := len(tAlt) + rIdx
+    if ref[:offset] != tAlt[:offset] {
+      log.Printf("%s %s:%s ALT#%d %s", errorLvl, chrom, pos, altIdx + 1, mixedError)
+      continue
+    }
+
+    positions = append(positions, strconv.Itoa(intPos + offset))
+    // we want the base after the last shared
+    references = append(references, ref[offset])
+
+    // the allele if -(len(ref) + rIdx - (len(tAlt) + rIdx))
+    alleles = append(alleles, strconv.Itoa(-(len(ref) + rIdx - offset)))
+    indexes = append(indexes, altIdx)
+
+    continue;
   }
 
-  /*********************** INSERTIONS AND DELETIONS *********************/
-  // TODO: Handle case where first base of contig is deleted, and padded as the first unmodified base downstream
-  //First base is always padding
-  if ref[0] != alt[0] {
-    return "", "", "", "", nil
+  // Any of the logged errors generated in loop
+  // This method saves us having to build up an "errors" slice
+  // While still allowing us to report/log bases
+  if len(alleles) == 0 {
+    return "", nil, nil, nil, nil
   }
 
-  /*************************** DELETIONS FIRST **************************/
-  if len(ref) > len(alt) {
-    intPos, err := strconv.Atoi(pos)
-    if err != nil {
-      return "", "", "", "", err
-    }
-
-    // Simple insertions delete the entire reference, sans the padding base to the left
-    // TODO: handle 1st base deleted in contig, padded to right
-    if len(alt) == 1 {
-      return "DEL", strconv.Itoa(intPos + 1), string(ref[1]), strconv.Itoa(1 - len(ref)), nil
-    }
-
-    // log.Println("Complex del", pos, ref, alt, multiallelic)
-
-    // Complex deletions, inside of a reference
-    // Ex: Ref: TCT Alt: T, TT (the TT is a 1 base C deletion)
-    //this typically only comes up with multiallelics that have a 2nd deletion, that covers all bases (excepting 1 padding base) in the reference
-    //In other cases, just skip for now, mostly seems like an error
-    if multiallelic == false {
-      return "", "", "", "", nil
-    }
-
-    // Our deletion should happen within the reference, so the non-padded
-    // portion of the reference is what we'll check
-    if strings.Contains(ref, alt[1: ]) == false {
-      return "", "", "", "", nil
-    }
-    // TODO: More precise checking; for instance we can check if the alt is contained within the end of the ref (sans the 1 base deletion)
-    return "DEL", strconv.Itoa(intPos + 1), string(ref[1]), strconv.Itoa(len(alt) - len(ref)), nil
+  // MULTI is basically the presence of a comma
+  // We don't just look at the length of the resulting alleles or references or indexes
+  // slices, because these can include MNPs, which are technically SNPs
+  if multi {
+    return parse.Multi, positions, references, alleles, indexes
   }
 
-  /*********************** INSERTIONS *********************/
-  // len(ref) > 1 should always indicate that this is a multiallelic that contains a deletion
-  // therefore requiring 1 base of padding to the left
-  // there may be cases where VCF variants are unnecessarily padded, but lets skip these
-  if len(ref) > 1 {
-    if multiallelic == false {
-      return "", "", "", "", nil
-    }
-
-    // log.Println("Complex ins", pos, ref, alt, multiallelic)
-
-    // Our insertion should happen within the reference, so the non-padded
-    // portion of the reference is what we'll check
-    if strings.Contains(alt, ref[1: ]) == false {
-      return "", "", "", "", nil
-    }
-    // TODO: More precise checking; for instance we can check if the alt is contained within the end of the ref (sans the 1 base deletion)
-    var insBuffer bytes.Buffer
-    insBuffer.WriteString("+")
-    insBuffer.WriteString(alt[1:len(alt) - len(ref) + 1])
-    return "INS", pos, string(ref[0]), insBuffer.String(), nil
+  // Anything below here is guaranteed to be of 1 annotation type
+  if alleles[0][0] == '-' {
+    return parse.Del, positions, references, alleles, indexes
   }
 
-  var insBuffer bytes.Buffer
-  insBuffer.WriteString("+")
-  insBuffer.WriteString(alt[1:])
-  return "INS", pos, ref, insBuffer.String(), nil
+  if alleles[0][0] == '+' {
+    return parse.Ins, positions, references, alleles, indexes
+  }
+
+  // MNPs and SNPs are both labeled SNP
+  return parse.Snp, positions, references, alleles, indexes
 }
 
 // Current limitations: Does not support alleleIdx > 9, or sites which have 2 digits allele numbers
