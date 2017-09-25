@@ -36,8 +36,8 @@ const badAltError string = "ALT not ACTG"
 const mixedError string = "Mixed indel/snp sites not supported"
 const complexNotice string = "Complex site"
 
-const noticeLvl string = "Notice: "
-const errorLvl string = "Error: "
+// const noticeLvl string = "Notice: "
+// const errorLvl string = "Error: "
 
 type Config struct {
   inPath string
@@ -320,6 +320,10 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
 
     siteType, positions, refs, alts, altIndices := getAlleles(record[chromIdx], record[posIdx], record[refIdx], record[altIdx])
 
+    if len(altIndices) == 0 {
+      continue
+    }
+
     multiallelic = siteType == parse.Multi
 
     // if last index > 9 then we can't accept the site, since won't be able
@@ -330,7 +334,6 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
     }
 
     for i, _ := range alts {
-
       // If no samples are provided, annotate what we can, skipping hets and homs
       // If samples are provided, but only missing genotypes, skip the site altogether
       if numSamples > 0 {
@@ -473,7 +476,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
   // optimize for the cases where no "," could be present, i.e len(alt) == 1
   if len(alt) == 1 {
     if alt != "A" && alt != "C" && alt != "G" && alt != "T" {
-      log.Printf("%s %s:%s ALT #1 %s\n", noticeLvl, chrom, pos, badAltError)
+      log.Printf("%s:%s ALT #1 %s\n", chrom, pos, badAltError)
 
       return "", nil, nil, nil, nil
     }
@@ -484,14 +487,14 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 
     // simple deletion must have 1 base padding match
     if alt[0] != ref[0] {
-      log.Printf("%s %s:%s ALT #1 %s", errorLvl, chrom, pos, delError1)
+      log.Printf("%s:%s ALT #1 %s", chrom, pos, delError1)
       return "", nil, nil, nil, nil
     }
 
     intPos, err := strconv.Atoi(pos)
 
     if err != nil {
-      log.Printf("%s %s:%s ALT #1 %s", errorLvl, chrom, pos, posError)
+      log.Printf("%s:%s ALT #1 %s", chrom, pos, posError)
       return "", nil, nil, nil, nil
     }
 
@@ -526,7 +529,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 
     // if a site doesn't have a valid form, like ACTG, skip it
     if altIsValid(tAlt) == false {
-      log.Printf("%s %s:%s ALT #%d %s\n", noticeLvl, chrom, pos, altIdx + 1, badAltError)
+      log.Printf("%s:%s ALT #%d %s\n", chrom, pos, altIdx + 1, badAltError)
       continue
     }
 
@@ -571,7 +574,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
       intPos, err = strconv.Atoi(pos)
 
       if err != nil {
-        log.Printf("%s %s:%s %s", errorLvl, chrom, pos, posError)
+        log.Printf("%s:%s %s", chrom, pos, posError)
         break
       }
     }
@@ -580,7 +583,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
     if len(tAlt) == 1 {
       // Simple deletion, padding of 1 base, padding must match
       if tAlt[0] != ref[0] {
-        log.Printf("%s %s:%s ALT#%d %s", errorLvl, chrom, pos, altIdx + 1, delError1)
+        log.Printf("%s:%s ALT#%d %s", chrom, pos, altIdx + 1, delError1)
         continue
       }
 
@@ -680,7 +683,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
       // The ref is ref[2 - 1] or ref[1]
       offset := len(ref) + rIdx
       if ref[:offset] != tAlt[:offset] {
-        log.Printf("%s %s:%s ALT#%d %s", errorLvl, chrom, pos, altIdx + 1, mixedError)
+        log.Printf("%s:%s ALT#%d %s", chrom, pos, altIdx + 1, mixedError)
         continue
       }
 
@@ -732,7 +735,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
     //position gets shifted by len(tAlt) + rIdx, since we don't want any padding in our output
     offset := len(tAlt) + rIdx
     if ref[:offset] != tAlt[:offset] {
-      log.Printf("%s %s:%s ALT#%d %s", errorLvl, chrom, pos, altIdx + 1, mixedError)
+      log.Printf("%s:%s ALT#%d %s", chrom, pos, altIdx + 1, mixedError)
       continue
     }
 
