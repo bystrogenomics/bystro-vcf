@@ -16,28 +16,33 @@ import (
 )
 
 const concurrency int = 8
-const chromIdx int = 0
-const posIdx int = 1
-const idIdx int = 2
-const refIdx int = 3
-const altIdx int = 4
-const qualIdx int = 5
-const filterIdx int = 6
-const infoIdx int = 7
-const formatIdx int = 8
 
-const insError1 string = "1st base ALT != REF"
-const delError1 string = "1st base REF != ALT"
-const badPrefixError string = "No shared suffix && prefix doesn't match"
-const sameError string = "REF == ALT"
-const missError string = "ALT == '.'"
-const posError string = "Invalid POS"
-const badAltError string = "ALT not ACTG"
-const mixedError string = "Mixed indel/snp sites not supported"
-const complexNotice string = "Complex site"
+const (
+  chromIdx int = 0
+  posIdx int = 1
+  idIdx int = 2
+  refIdx int = 3
+  altIdx int = 4
+  qualIdx int = 5
+  filterIdx int = 6
+  infoIdx int = 7
+  formatIdx int = 8
+)
 
-// const noticeLvl string = "Notice: "
-// const errorLvl string = "Error: "
+const (
+  insError1 string = "1st base ALT != REF"
+  delError1 string = "1st base REF != ALT"
+  badPrefixError string = "No shared suffix && prefix doesn't match"
+  sameError string = "REF == ALT"
+  missError string = "ALT == '.'"
+  posError string = "Invalid POS"
+  badAltError string = "ALT not ACTG"
+  mixedError string = "Mixed indel/snp sites not supported"
+  complexNotice string = "Complex site"
+
+  errorLvl string = "Error: "
+)
+
 
 type Config struct {
   inPath string
@@ -469,7 +474,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
   // First check the simple cases, for performance reasons
   if alt == ref {
     // No point in returning ref sites
-    log.Printf("%s %s:%s : %s\n", errorLvl, chrom, pos, sameError)
+    log.Printf("%s:%s : %s\n", chrom, pos, sameError)
     return "", nil, nil, nil, nil
   }
 
