@@ -4,85 +4,136 @@
 
 ## TL:DR
 
-A really fast, simple VCF pre-processor and annotator. Takes a VCF file, splits multiallelics, normalizes indel representations by removing padding. 
+A really fast, simple VCF pre-processor and annotator.
+
+Performs several important functions:
+1) Splits multiallelics and MNP alleles, keeping track of each allele's index with respect to the original alleles for downstream INFO property segregation
+2) Performs QC on variants: checks whether allele contains ACTG, that padding bases match reference, and more
+3) Allows filtering of variants by any number of FILTER properties (by default allows PASS/. variants)
+4) Normalizes indel representations by removing padding, left shifting alleles to their parsimonious representations
+5) calculates whether site is transition, transversion, or neither
+6) Processes all available samples
+  - calculates homozygosity, heterozygosity, missingness
+  - labels samples as homozygous, heterozygous, or missing
+
+<br>
+
+## Publication
+
+bystro-vcf is used to pre-proces VCF files for Bystro.
+
+If you use bystro-vcf please cite https://genomebiology.biomedcentral.com/articles/10.1186/s13059-018-1387-3 
+
+<br>
+
+## Performance
+Millions of variants/rows per minute.
+
+Performance is dependent on the # of samples.
+
+#### Performance with thousands of samples
+Amazon i3.2xlarge (4 core), 1000 Genomes Phase 3 (2,504 sample): All of chromosome 1 (6.2M variants) in 5m30s.
+
+<br>
+
+## Installation
 
 ```shell
 go get github.com/akotlar/bystro-vcf && go install $_;
 
-pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,."
+pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." 
 ```
+
+<br>
+
+## Use
+
+Piping:
+```shell
+pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." | pigz -c - > /path/to/out.gz
+```
+
+Input argument
+```shell
+bystro-vcf --inPath /path/to/vcf --keepId --keepInfo --allowFilter "PASS,." > /path/to/out
+```
+
 
 ## Output
 ```tsv
 chrom <String>   pos <Int>   type <String[SNP|DEL|INS|MULTIALLELIC]>    ref <String>    alt <String>    trTv <Int[0|1|2]>     heterozygotes <String>     heterozygosity <Float64>    homozygotes <String>     homozygosity <Float64>     missingGenos <String>    missingness <Float64>    sampleMaf <Float64>    id <String?>    alleleIndex <Int?>   info <String?>
 ```
 
-## Options
+<br>
+
+## Optional arguments
 
 ```shell
 --keepId <Bool>
 ```
-**Optional**. Keep delimiter to use when joining multiple values in the output of one field. Defaults to `;`
 
-Will add the `id` after missingGenos
+Retain the "ID" field in the output.
 
-<br/>
+<br>
 
 ```shell
 --keepInfo <Bool>
 ```
 
-**Optional**. What delimiter to use when joining multiple values in the output of one field. Defaults to `;`
+Retain the "INFO" field in the output. 
+  - Since we decompose multiallelics, bystro-vcf also adds an "alleleIdx" field, containing the index (0-based) of the row's allele relative the the multiallelic
 
-Will add two fields: after either `missingGenos`, or `id` should `--keepId` be set
+
+Adds 2 fields after either `missingGenos`, or `id` should `--keepId` be set
   1. `alleleIdx` will contain the index of allele in a split multiallelic. 0 by default.
   2. `info` will contain the entire `INFO` string
 
-<br/>
-
+<br>
 
 ```shell
 --allowFilter <String>
 ```
 
-**Optional**. Which `FILTER` values to keep. Comma separated. Defaults to `"PASS,."`
+Which `FILTER` values to keep. Comma separated. Defaults to `"PASS,."`
 - Similar to [https://samtools.github.io/bcftools/bcftools.html](bcftools) `-f, --apply-filters LIST`
 
-<br/>
+<br>
 
 ```shell
 --excludeFilter <String>
 ```
 
-**Optional**. Which `FILTER` values to exclude. Comma separated. Defaults to `""`
+Which `FILTER` values to exclude. Comma separated. Defaults to `""`
 - Opposite of [https://samtools.github.io/bcftools/bcftools.html](bcftools) `-f, --apply-filters LIST`
 
-<br/>
+<br>
 
 ```shell
 --inPath /path/to/uncompressedFile.vcf
 ```
 
-**Optional**. An input file path, to an uncompressed VCF file. Defaults to `stdin`
+An input file path, to an uncompressed VCF file. Defaults to `stdin`
 
-<br/>
+<br>
 
 ```shell
 --errPath /path/to/log.txt
 ```
 
-**Optional**. Where to store log messages. Defaults to `stderr`
+Where to store log messages. Defaults to `stderr`
 
-<br/>
+<br>
 
 ```shell
 --emptyField "!"
 ```
-**Optional**. What value to give to missing data. Defaults to `!`
 
-<br/>
+Which value to assign to missing data. Defaults to `!`
+
+<br>
 
 ```shell
 --fieldDelimiter ";"
 ```
-**Optional**. What delimiter to use when joining multiple values in the output of one field. Defaults to `;`
+
+Which delimiter to use when joining multiple values. Defaults to `;`
