@@ -1,10 +1,20 @@
 # bystro-vcf [![Build Status](https://travis-ci.org/akotlar/bystro-vcf.svg?branch=master)](https://travis-ci.org/akotlar/bystro-vcf)
 
-<br>
-
-## TL:DR
+## TL;DR
 
 A really fast, simple VCF pre-processor and annotator.
+
+```shell
+go get github.com/akotlar/bystro-vcf && go install $_;
+
+pigz -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo | pigz -c - > output
+```
+
+<br>
+
+## Description
+
+
 
 Performs several important functions:
 1) Splits multiallelics and MNP alleles, keeping track of each allele's index with respect to the original alleles for downstream INFO property segregation
@@ -37,22 +47,20 @@ Amazon i3.2xlarge (4 core), 1K Genomes Phase 3 (2,504 samples): chromosome 1 (6.
 
 ```shell
 go get github.com/akotlar/bystro-vcf && go install $_;
-
-pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." 
 ```
 
 <br>
 
 ## Use
 
-Piping:
+Via pipe:
 ```shell
-pigz -d -c /some/vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." | pigz -c - > /path/to/out.gz
+pigz -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." | pigz -c - > out.gz
 ```
 
-Input argument
+Via ```inpPath``` argument:
 ```shell
-bystro-vcf --inPath /path/to/vcf --keepId --keepInfo --allowFilter "PASS,." > /path/to/out
+bystro-vcf --inPath in.vcf --keepId --keepInfo --allowFilter "PASS,." > out
 ```
 
 <br>
