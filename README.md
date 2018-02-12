@@ -58,7 +58,7 @@ Via pipe:
 pigz -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." | pigz -c - > out.gz
 ```
 
-Via ```inpPath``` argument:
+Via ```inPath``` argument:
 ```shell
 bystro-vcf --inPath in.vcf --keepId --keepInfo --allowFilter "PASS,." > out
 ```
