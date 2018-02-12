@@ -1,6 +1,6 @@
 # bystro-vcf [![Build Status](https://travis-ci.org/akotlar/bystro-vcf.svg?branch=master)](https://travis-ci.org/akotlar/bystro-vcf)
 
-
+<br>
 
 ## TL:DR
 
@@ -27,11 +27,8 @@ If you use bystro-vcf please cite https://genomebiology.biomedcentral.com/articl
 <br>
 
 ## Performance
-Millions of variants/rows per minute.
+Millions of variants/rows per minute. Performance is dependent on the # of samples.
 
-Performance is dependent on the # of samples.
-
-#### Performance with thousands of samples
 Amazon i3.2xlarge (4 core), 1000 Genomes Phase 3 (2,504 sample): All of chromosome 1 (6.2M variants) in 5m30s.
 
 <br>
@@ -58,6 +55,7 @@ Input argument
 bystro-vcf --inPath /path/to/vcf --keepId --keepInfo --allowFilter "PASS,." > /path/to/out
 ```
 
+<br>
 
 ## Output
 ```tsv
