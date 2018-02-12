@@ -79,10 +79,11 @@ Retain the "ID" field in the output.
 ```
 
 Retain the "INFO" field in the output. 
-  - Since we decompose multiallelics, bystro-vcf also adds an "alleleIdx" field, containing the index (0-based) of the row's allele relative the the multiallelic
+  - Since we decompose multiallelics, an "alleleIdx" field is added to the output. It contains the 0-based index of that allele in the multiallelic
+  - This is necessary for downstream programs to decompose the INFO field per-allele
 
 
-Adds 2 fields after either `missingGenos`, or `id` should `--keepId` be set
+Results in 2 output fields, following `missingGenos` or `id` should `--keepId` be set
   1. `alleleIdx` will contain the index of allele in a split multiallelic. 0 by default.
   2. `info` will contain the entire `INFO` string
 
