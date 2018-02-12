@@ -11,16 +11,16 @@ Performs several important functions:
 2) Performs QC on variants: checks whether allele contains ACTG, that padding bases match reference, and more
 3) Allows filtering of variants by any number of FILTER properties (by default allows PASS/. variants)
 4) Normalizes indel representations by removing padding, left shifting alleles to their parsimonious representations
-5) calculates whether site is transition, transversion, or neither
+5) Calculates whether site is transition, transversion, or neither
 6) Processes all available samples
-  - calculates homozygosity, heterozygosity, missingness
-  - labels samples as homozygous, heterozygous, or missing
+    - calculates homozygosity, heterozygosity, missingness
+    - labels samples as homozygous, heterozygous, or missing
 
 <br>
 
 ## Publication
 
-bystro-vcf is used to pre-proces VCF files for Bystro.
+bystro-vcf is used to pre-proces VCF files for [Bystro](https://bystro.io) ([github](https://github.com/akotlar/bystro))
 
 If you use bystro-vcf please cite https://genomebiology.biomedcentral.com/articles/10.1186/s13059-018-1387-3 
 
@@ -29,7 +29,7 @@ If you use bystro-vcf please cite https://genomebiology.biomedcentral.com/articl
 ## Performance
 Millions of variants/rows per minute. Performance is dependent on the # of samples.
 
-Amazon i3.2xlarge (4 core), 1000 Genomes Phase 3 (2,504 sample): All of chromosome 1 (6.2M variants) in 5m30s.
+Amazon i3.2xlarge (4 core), 1K Genomes Phase 3 (2,504 samples): chromosome 1 (6.2M variants) in 5m30s.
 
 <br>
 
