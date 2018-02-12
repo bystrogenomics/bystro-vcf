@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-A really fast, simple VCF pre-processor and annotator.
+A really fast, simple VCF pre-processor and annotator. Millions of variants per minute.
 
 ```shell
 go get github.com/akotlar/bystro-vcf && go install $_;
