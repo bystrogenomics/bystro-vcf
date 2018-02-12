@@ -1,4 +1,6 @@
-# bystro-vcf
+# bystro-vcf [![Build Status](https://travis-ci.org/akotlar/bystro-vcf.svg?branch=master)](https://travis-ci.org/akotlar/bystro-vcf)
+
+
 
 ## TL:DR
 
