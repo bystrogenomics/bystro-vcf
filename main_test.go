@@ -1315,8 +1315,9 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	}
 
 	// repeat but with "/" and GT
+	// Note, that we no longer expect missing records to have genotype quality strings
 	record = strings.Join([]string{"10", "1000", "rs456", "C", "T,G", "100", "PASS",
-		"AC=1", "GT:GQ", "1/1:1,2,3", "0/0:4,5,6", "0/2:1,3,5", "./.:0,0,0"}, "\t")
+		"AC=1", "GT:GQ", "1/1:1,2,3", "0/0:4,5,6", "0/2:1,3,5", "./."}, "\t")
 
 	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
 	reader = bufio.NewReader(strings.NewReader(lines))
@@ -1405,6 +1406,13 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 				t.Log("OK: Recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			} else {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
+			}
+
+			// missingness
+			if resultRow[11] == strconv.FormatFloat(float64(1)/float64(4), 'G', 3, 64) {
+				t.Log("OK: could recapitulate missingness even when the misssing genotype doesn't have the expected FORMAT data", resultRow)
+			} else {
+				t.Error("NOT OK: couldn't recapitulate missingness even when the misssing genotype doesn't have the expected FORMAT data", resultRow)
 			}
 
 			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.

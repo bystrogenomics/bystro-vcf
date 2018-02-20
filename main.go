@@ -799,6 +799,9 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 // Most multialellics with > 10 alleles will be false positives
 // because a true site would require a mutation rate of >> 1e-8 (say in chromosomal instability) and 10k samples
 // or an effective population size of billions (vs 10k expected) ; else .001^10 == 10^-30 == never happens
+
+// TODO: decide whether to be more strict about missing genotypes
+// Currently some garbage like .... would be considered "missing"
 func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]string, []string, []string, float64) {
   simpleGt := !strings.Contains(fields[formatIdx], ":")
 
@@ -824,14 +827,18 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
   20 1234567 microsat1 GTC G,GTCT 50 PASS NS=3;DP=9;AA=G GT:GQ:DP 0/1:35:4 0/2:17:2 1/1:40:3
   */
   SAMPLES:
+    // NOTE: If any errors encountered, all genotypes in row will be skipped and logged, since
+    // this represents a likely corruption of data
     for i := 9; i < len(header); i++ {
+      // If any 1 allele missing the genotype is, by definition missing
+      // Applies to haploid as well as diploid+ sites
+      if fields[i][0] == '.' {
+        missing = append(missing, header[i])
+        continue
+      }
+
       // haploid
       if len(fields[i]) == 1 || fields[i][1] == ':' {
-        if fields[i][0] == '.' {
-          missing = append(missing, header[i])
-          continue
-        }
-
         if fields[i][0] == '0' {
           totalGtCount++
           continue
@@ -852,6 +859,21 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
         continue
       }
 
+      if len(fields[i]) < 3 {
+        log.Printf("%s:%s : Skipping. Couldn't decode genotype %s (expected at least 3 characters)", fields[chromIdx], fields[posIdx], fields[i])
+        return []string{}, []string{}, []string{}, 0
+      }
+
+      // If for some reason the first allele call isn't . but 2nd is,
+      // send that to missing too
+      // Important to check here, because even if !simpleGt, GATK
+      // will not output genotype QC data for missing genotypes
+      // i.e, even with a format string (0/0:1,2:3:4:etc), we will see './.'
+      if fields[i][2] == '.' {
+        missing = append(missing, header[i])
+        continue
+      }
+
       // Allow for some rare cases where > 10 alleles (including reference)
       if fields[i][1] == '|' || fields[i][2] == '|' {
         // Speed up the most common cases
@@ -861,10 +883,11 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
             continue
           }
 
-          if fields[i] == ".|." {
-            missing = append(missing, header[i])
-            continue
-          }
+          // No longer strictly needed because of line 863
+          // if fields[i] == ".|." {
+          //   missing = append(missing, header[i])
+          //   continue
+          // }
 
           if alleleNum == '1' {
             if fields[i] == "0|1" || fields[i] == "1|0" {
@@ -884,13 +907,6 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
         } else {
           if fields[i][0:4] == "0|0:" {
             totalGtCount += 2
-            continue
-          }
-
-          // Don't count missing samples toward totalGt, so that sampleMaf
-          // is conservative (missing genotypes are not informative)
-          if fields[i][0:4] == ".|.:" {
-            missing = append(missing, header[i])
             continue
           }
 
@@ -920,11 +936,6 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
             continue
           }
 
-          if fields[i] == "./." {
-            missing = append(missing, header[i])
-            continue
-          }
-
           if alleleNum == '1' {
             if fields[i] == "0/1" || fields[i] == "1/0" {
               totalGtCount += 2
@@ -941,13 +952,13 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
             }
           }
         } else {
-          if fields[i][0:4] == "0/0:" {
-            totalGtCount += 2
-            continue
+          if len(fields[i]) < 4 {
+            log.Printf("%s:%s : Skipping. Couldn't decode genotype %s (expected FORMAT data)", fields[chromIdx], fields[posIdx], fields[i])
+            return []string{}, []string{}, []string{}, 0
           }
 
-          if fields[i][0:4] == "./.:" {
-            missing = append(missing, header[i])
+          if fields[i][0:4] == "0/0:" {
+            totalGtCount += 2
             continue
           }
 
