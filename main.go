@@ -43,15 +43,16 @@ const (
   errorLvl string = "Error: "
 )
 
-
 type Config struct {
   inPath string
+  famPath string
   errPath string
   emptyField string
   fieldDelimiter string
   keepId bool
   keepInfo bool
-  //keepQual bool
+  keepQual bool
+  keepPos bool
   cpuProfile string
   allowedFilters map[string]bool
 }
@@ -59,11 +60,13 @@ type Config struct {
 func setup(args []string) *Config {
   config := &Config{}
   flag.StringVar(&config.inPath, "inPath", "", "The input file path (optional: default is stdin)")
+  flag.StringVar(&config.famPath, "famPath", "", "The fam file path (optional)")
   flag.StringVar(&config.errPath, "errPath", "", "The output path for the JSON output (optional)")
   flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
   flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
   flag.BoolVar(&config.keepId, "keepId", false, "Retain the ID field in output")
-  //flag.BoolVar(&config.keepQual, "keepQual", false, "Retain the QUAL field in output")
+  flag.BoolVar(&config.keepQual, "keepQual", false, "Retain the QUAL field in output")
+  flag.BoolVar(&config.keepPos, "keepPos", false, "Retain the original VCF position in output")
   flag.BoolVar(&config.keepInfo, "keepInfo", false, "Retain INFO field in output (2 appended output fields: allele index and the INFO field. Will appear after id field if --keepId flag set.")
   flag.StringVar(&config.cpuProfile, "cpuProfile", "", "Write cpu profile to file at this path")
   filteredVals := flag.String("allowFilter", "PASS,.", "Allow rows that have this FILTER value (comma separated)")
@@ -132,6 +135,11 @@ func main() {
   reader := bufio.NewReader(inFh)
 
   fmt.Print(stringHeader(config))
+
+  // if config.famPath != "" {
+  //   fillSampleIdx(config.famPath)
+  // }
+
   readVcf(config, reader, func(row string) {fmt.Print(row)})
 }
 
@@ -147,6 +155,10 @@ func stringHeader(config *Config) string {
 func header(config *Config) []string {
   header := parse.Header
 
+  if config.keepPos {
+    header = append(header, "vcfPos")
+  }
+
   if config.keepId {
     header = append(header, "id")
   }
@@ -157,6 +169,10 @@ func header(config *Config) []string {
 
   return header
 }
+
+// func fillSampleIdx (config *Config) {
+
+// }
 
 func readVcf (config *Config, reader *bufio.Reader, resultFunc func(row string)) {
   foundHeader := false
@@ -255,8 +271,7 @@ func readVcf (config *Config, reader *bufio.Reader, resultFunc func(row string))
 
   // Now read them all off, concurrently.
   for i := 0; i < concurrency; i++ {
-    go processLines(header, config.emptyField, config.fieldDelimiter, config.keepId,
-      config.keepInfo, config.allowedFilters, workQueue, results, complete)
+    go processLines(header, config, workQueue, results, complete)
   }
 
   // Wait for everyone to finish.
@@ -292,8 +307,7 @@ func altIsValid(alt string) bool {
   return true
 }
 
-func processLines(header []string, emptyField string, fieldDelimiter string, keepId bool, keepInfo bool,
-keepFiltered map[string]bool, queue chan string, results chan string, complete chan bool) {
+func processLines(header []string, config *Config, queue chan string, results chan string, complete chan bool) {
   var alleles []string
   var multiallelic bool
 
@@ -308,6 +322,13 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
   var sampleMaf float64
   var effectiveSamples float64
 
+  emptyField := config.emptyField
+  fieldDelim := config.fieldDelimiter
+  keepId := config.keepId
+  keepInfo := config.keepInfo
+  allowedFilters := config.allowedFilters
+  keepPos := config.keepPos
+
   if(len(header) > 9) {
     numSamples = float64(len(header) - 9)
   } else if(len(header) == 9) {
@@ -319,7 +340,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
   for line := range queue {
     record := strings.Split(line, "\t")
     
-    if !linePasses(record, header, keepFiltered) {
+    if !linePasses(record, header, allowedFilters) {
       continue
     }
 
@@ -362,14 +383,16 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
 
       output.WriteString(record[chromIdx])
       output.WriteString("\t")
+
       output.WriteString(positions[i])
       output.WriteString("\t")
 
       output.WriteString(siteType)
-
       output.WriteString("\t")
+
       output.WriteByte(refs[i])
       output.WriteString("\t")
+
       output.WriteString(alts[i])
       output.WriteString("\t")
 
@@ -388,7 +411,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         output.WriteString("\t")
         output.WriteString("0")
       } else {
-        output.WriteString(strings.Join(hets, fieldDelimiter))
+        output.WriteString(strings.Join(hets, fieldDelim))
         output.WriteString("\t")
 
         // This gives plenty precision; we are mostly interested in
@@ -410,7 +433,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         output.WriteString("\t")
         output.WriteString("0")
       } else {
-        output.WriteString(strings.Join(homs, fieldDelimiter))
+        output.WriteString(strings.Join(homs, fieldDelim))
         output.WriteString("\t")
         output.WriteString(strconv.FormatFloat(float64(len(homs)) / effectiveSamples, 'G', 3, 64))
       }
@@ -424,7 +447,7 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         output.WriteString("\t")
         output.WriteString("0")
       } else {
-        output.WriteString(strings.Join(missing, fieldDelimiter))
+        output.WriteString(strings.Join(missing, fieldDelim))
         output.WriteString("\t")
         output.WriteString(strconv.FormatFloat(float64(len(missing)) / numSamples, 'G', 3, 64))
       }
@@ -443,6 +466,14 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 3, 64))
       }
 
+      /******************* Optional Fields ***********************/
+      if keepPos == true {
+        // Write the input VCF position; we normalize this above
+        // and here you can validate that transformation
+        output.WriteString("\t")
+        output.WriteString(record[posIdx])
+      }
+
       if keepId == true {
         output.WriteString("\t")
         output.WriteString(record[idIdx])
@@ -452,8 +483,9 @@ keepFiltered map[string]bool, queue chan string, results chan string, complete c
         // Write the index of the allele, to allow users to segregate data in the INFO field
         output.WriteString("\t")
         output.WriteString(strconv.Itoa(altIndices[i]))
+
+        // Write info for all indices
         output.WriteString("\t")
-        // INFO index is 7
         output.WriteString(record[infoIdx])
       }
 
@@ -654,7 +686,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 
     if len(tAlt) > len(ref) {
       rIdx := 0
-      // we won't allow the enitre ref to match as a suffix, only up to 1 base downstream from beginning of ref
+      // we won't allow the entire ref to match as a suffix, only up to 1 base downstream from beginning of ref
       for len(tAlt) + rIdx > 0 && len(ref) + rIdx > 1 && tAlt[len(tAlt) + rIdx - 1] == ref[len(ref) + rIdx - 1] {
         rIdx--
       }

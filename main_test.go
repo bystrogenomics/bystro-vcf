@@ -8,30 +8,11 @@ import (
 	"bufio"
 )
 
-// func BenchmarkString(b *testing.B) {
-//   test := "0|0:"
-
-//   for i := 0; i < b.N; i++ {
-//     if strings.Contains(test, "|") {
-      
-//     }
-//   }
-// }
-
-// func BenchmarkStringExact(b *testing.B) {
-//   test := "0|0:"
-
-//   for i := 0; i < b.N; i++ {
-//     if test[1] == '|' {
-
-//     }
-//   }
-// }
-
 func TestKeepFlagsTrue(t *testing.T) {
 	args := []string{
 		"--keepInfo",
 		"--keepId",
+		"--keepPos",
 		"--inPath", "/path/to/file",
 		"--errPath", "/path/to/err",
 		"--cpuProfile", "/path/to/profile",
@@ -41,8 +22,8 @@ func TestKeepFlagsTrue(t *testing.T) {
 
 	config := setup(args)
 
-  if config.keepInfo != true || config.keepId != true {
-  	t.Error("NOT OK: parse keepInfo and keepId args")
+  if !(config.keepInfo == true && config.keepId == true && config.keepPos == true)  {
+  	t.Error("NOT OK: parse keepInfo, keepId, keepPos args")
   }
 
   if config.inPath != "/path/to/file" || config.errPath != "/path/to/err" ||
@@ -69,12 +50,25 @@ func TestHeader(t *testing.T) {
 		t.Error("NOT OK: print header", header, expected)
 	}
 
-	config = Config{keepId: true, keepInfo: false}
+	config = Config{keepPos: true, keepId: false, keepInfo: false}
 
 	header = stringHeader(&config)
 
 	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf", "id"}, "\t")
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf", "vcfPos"}, "\t")
+
+	if header == expected + "\n" {
+		t.Log("OK: print header with --keepPos true", header, expected)
+	} else {
+		t.Error("NOT OK: print header with --keepPostrue true", header, expected)
+	}
+
+	config = Config{keepPos: true, keepId: true, keepInfo: false}
+
+	header = stringHeader(&config)
+
+	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf", "vcfPos", "id"}, "\t")
 
 	if header == expected + "\n" {
 		t.Log("OK: print header with --keepId true", header, expected)
@@ -82,7 +76,7 @@ func TestHeader(t *testing.T) {
 		t.Error("NOT OK: print header with --keepId true", header, expected)
 	}
 
-	config = Config{keepId: false, keepInfo: true}
+	config = Config{keepPos: false, keepId: false, keepInfo: true}
 
 	header = stringHeader(&config)
 
@@ -96,7 +90,7 @@ func TestHeader(t *testing.T) {
 		t.Error("NOT OK: print header with --keepInfo true", header, expected)
 	}
 
-	config = Config{keepId: true, keepInfo: true}
+	config = Config{keepPos: false, keepId: true, keepInfo: true}
 
 	header = stringHeader(&config)
 
@@ -106,6 +100,34 @@ func TestHeader(t *testing.T) {
 
 	if header == expected + "\n" {
 		t.Log("OK: print header with -keepId true --keepInfo true", header)
+	} else {
+		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
+	}
+
+	config = Config{keepPos: true, keepId: true, keepInfo: true}
+
+	header = stringHeader(&config)
+
+	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+    "sampleMaf", "vcfPos", "id", "alleleIdx", "info"}, "\t")
+
+	if header == expected + "\n" {
+		t.Log("OK: print header with --keepPos true --keepId true --keepInfo true", header)
+	} else {
+		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
+	}
+
+	config = Config{keepPos: true, keepId: false, keepInfo: true}
+
+	header = stringHeader(&config)
+
+	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
+    "heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+    "sampleMaf", "vcfPos", "alleleIdx", "info"}, "\t")
+
+	if header == expected + "\n" {
+		t.Log("OK: print header with --keepPos true --keepId false --keepInfo true", header)
 	} else {
 		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
 	}
@@ -318,7 +340,7 @@ func TestUpdateFieldsWithAlt(t *testing.T) {
 	expType, exPos, expRef, expAlt = "INS", "100", byte('T'), "+AGCTT"
 
 	sType, pos, refs, alts, altIndices = getAlleles("chr1", "100", "T", "TAGCTT")
-	
+
 	test = "Insertions where reference is 1 base long"
 
 	if sType != expType || pos[0] != exPos || refs[0] != expRef || alts[0] != expAlt {
@@ -764,7 +786,7 @@ func TestOutputsInfo(t *testing.T) {
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
-  		
+
   	if resultRow[4] != "T" {
   		t.Error("Couldn't parse T allele", resultRow)
   	}
@@ -778,7 +800,7 @@ func TestOutputsInfo(t *testing.T) {
   	} else {
   		t.Error("NOT OK: With keepInfo flag set, but not keepId, should output 15 fields", resultRow)
   	}
-  	
+
 		if resultRow[len(resultRow) - 2] == "0" && resultRow[len(resultRow) - 1] == "AC=1" {
 			t.Log("OK: add INFO field correctly for single field")
 		} else {
@@ -796,7 +818,7 @@ func TestOutputsInfo(t *testing.T) {
   	index++
 
   	resultRow := strings.Split(row[:len(row)-1], "\t")
-  	
+
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
@@ -903,7 +925,101 @@ func TestOutputsId(t *testing.T) {
 	}
 }
 
-func TestOutputsSamplesIdAndInfo(t *testing.T) {
+func TestOutputsVcfPos(t *testing.T) {
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}, "\t")
+
+	// Define a interstital insertion, between C & T
+	record := strings.Join([]string{"10", "1000", "rs#", "CTT", "CT", "100", "PASS", "AC=1"}, "\t")
+
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepPos: true}
+
+	readVcf(&config, reader, func(row string) {
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if len(resultRow) != 14 {
+  		t.Error("With keepPos only set, expect 14 fields", resultRow)
+  	}
+
+  	vcfPos, err := strconv.Atoi(resultRow[len(resultRow) - 1])
+
+		if err != nil || vcfPos != 1000 {
+			t.Error("Deletions should get the vcf input position with --keepPos, in the vcfPos column", resultRow)
+		}
+	})
+
+	record = strings.Join([]string{"10", "1003", "rs#", "C", "T,G", "100", "PASS", "AC=1"}, "\t")
+
+	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader = bufio.NewReader(strings.NewReader(lines))
+
+	index := -1;
+  readVcf(&config, reader, func(row string) {
+  	index++
+
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+		if len(resultRow) != 14 {
+  		t.Error("With keepPos flag set only, each allele in multiallelics should have 14 fields in its row", resultRow)
+  	}
+
+  	vcfPos, err := strconv.Atoi(resultRow[len(resultRow) - 1])
+
+  	if err != nil || vcfPos != 1003 {
+			t.Error("Each allele in a multiallelic should get the vcf input position with --keepPos, in the vcfPos column", resultRow)
+		}
+	})
+
+	if index != 1 {
+		t.Error("NOT OK: Expected to parse 2 alleles, parsed fewer")
+	}
+}
+
+func TestOutputsVcfPosIdAndInfo(t *testing.T) {
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}, "\t")
+
+	// Define a interstital insertion, between C & T
+	record := strings.Join([]string{"10", "1000", "rs1", "CTT", "CT", "100", "PASS", "AC=1"}, "\t")
+
+	lines := versionLine + "\n" + header + "\n" + record	+ "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepPos: true, keepId: true, keepInfo: true}
+
+	readVcf(&config, reader, func(row string) {
+  	resultRow := strings.Split(row[:len(row)-1], "\t")
+
+  	if len(resultRow) != 17 {
+  		t.Error("With keepId, keepInfo, and keepPos flags set, expected 18 fields", resultRow)
+  	}
+
+  	vcfPos, err := strconv.Atoi(resultRow[len(resultRow) - 4])
+
+		if err != nil || vcfPos != 1000 {
+			t.Error("vcfPos should be the first optional field")
+		}
+
+		if resultRow[len(resultRow) - 3] != "rs1" {
+			t.Error("id should come after vcfPos")
+		}
+
+		altIdx, err := strconv.Atoi(resultRow[len(resultRow) - 2])
+
+		if err != nil || altIdx != 0 {
+			t.Error("altIdx should come after vcfPos and after id")
+		}
+
+		if resultRow[len(resultRow) - 1] != "AC=1" {
+			t.Error("INFO should come after vcfPos, id, and altIdx")
+		}
+	});
+}
+
+func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
 		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4"}, "\t")
@@ -914,31 +1030,29 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 
 	reader := bufio.NewReader(strings.NewReader(lines))
 
-	config := Config{emptyField: "!", fieldDelimiter: ";", keepId: true, keepInfo: true}
+	config := Config{emptyField: "!", fieldDelimiter: ";", keepPos: true, keepId: true, keepInfo: true}
 
   readVcf(&config, reader, func(row string) {
   	resultRow := strings.Split(row[:len(row)-1], "\t")
-  	
+
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
   	if resultRow[5] != "2" {
   		t.Error("Transversions should have value 2", resultRow)
-  	} else {
-  		t.Log("Parsed transversion with value 2", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With both keepId and retainInfo flags set, should output 16 fields")
   	}
 
-		if resultRow[len(resultRow) - 3] == "rs123" {
-			t.Log("OK: add ID field correctly for single field")
-		} else {
-			t.Error("NOT OK: Couldn't add ID field", resultRow)
+  	if resultRow[len(resultRow) - 4] != "1000" {
+			t.Error("with keepPos, should get original input position as first optional field")
+		}
+
+		if resultRow[len(resultRow) - 3] != "rs123" {
+			t.Error("Expect ID field after vcfPos")
 		}
 
 		if resultRow[len(resultRow) - 2] == "0" && resultRow[len(resultRow) - 1] == "AC=1" {
@@ -1006,18 +1120,20 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	index := -1
   readVcf(&config, reader, func(row string) {
   	index++
- 
+
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With keepPos, keepId, and keepInfo flags set, should output 17 fields", resultRow)
   	}
+
+  	if resultRow[len(resultRow) - 4] != "1000" {
+			t.Error("with keepPos, should get original input position as first optional field, for each allele in multialelic")
+		}
 
   	if resultRow[len(resultRow) - 3] == "rs456" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
@@ -1112,18 +1228,20 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	index = -1
   readVcf(&config, reader, func(row string) {
   	index++
- 
+
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With keepPos, keepId, and keepInfo flags set, should output 17 fields", resultRow)
   	}
+
+  	if resultRow[len(resultRow) - 4] != "1000" {
+			t.Error("with keepPos, should get original input position as first optional field")
+		}
 
   	if resultRow[len(resultRow) - 3] == "rs456" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
@@ -1218,18 +1336,20 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	index = -1
   readVcf(&config, reader, func(row string) {
   	index++
- 
+
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With keepPos, keepId, and keepInfo flags set, should output 17 fields", resultRow)
   	}
+
+  	if resultRow[len(resultRow) - 4] != "1000" {
+			t.Error("with keepPos, should get original input position as first optional field")
+		}
 
   	if resultRow[len(resultRow) - 3] == "rs456" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
@@ -1325,18 +1445,20 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	index = -1
   readVcf(&config, reader, func(row string) {
   	index++
- 
+
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if resultRow[0] != "chr10" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With keepPos, keepId, and keepInfo flags set, should output 17 fields", resultRow)
   	}
+
+  	if resultRow[len(resultRow) - 4] != "1000" {
+			t.Error("with keepPos, should get original input position as first optional field")
+		}
 
   	if resultRow[len(resultRow) - 3] == "rs456" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
@@ -1441,18 +1563,20 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	index = -1
   readVcf(&config, reader, func(row string) {
   	index++
- 
+
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if resultRow[0] != "chr15" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With keepPos, keepId, and keepInfo flags set, should output 17 fields", resultRow)
   	}
+
+  	if resultRow[len(resultRow) - 4] != "1001" {
+			t.Error("with keepPos, should get original input position as first optional field")
+		}
 
   	if resultRow[len(resultRow) - 3] == "rs457" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
@@ -1540,7 +1664,7 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	// Test with no missing alleles, and "/" delimiter
 	header = strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
 		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5"}, "\t")
-	record = strings.Join([]string{"15", "1001", "rs457", "C", "T,G", "100", "PASS",
+	record = strings.Join([]string{"15", "1002", "rs457", "C", "T,G", "100", "PASS",
 		"AC=2", "GT", "0/1", "2/0", "2/2", "0/0", "1/0"}, "\t")
 
 	lines = versionLine + "\n" + header + "\n" + record	+ "\n"
@@ -1550,18 +1674,20 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	index = -1
   readVcf(&config, reader, func(row string) {
   	index++
- 
+
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if resultRow[0] != "chr15" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With keepPos, keepId, and keepInfo flags set, should output 17 fields", resultRow)
   	}
+
+  	if resultRow[len(resultRow) - 4] != "1002" {
+			t.Error("with keepPos, should get original input position as first optional field")
+		}
 
   	if resultRow[len(resultRow) - 3] == "rs457" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
@@ -1659,18 +1785,20 @@ func TestOutputsSamplesIdAndInfo(t *testing.T) {
 	index = -1
   readVcf(&config, reader, func(row string) {
   	index++
- 
+
   	resultRow := strings.Split(row[:len(row)-1], "\t")
 
   	if resultRow[0] != "chr15" {
   		t.Error("chromosome should have chr appended", resultRow)
   	}
 
-  	if len(resultRow) == 16 {
-  		t.Log("OK: With both keepId and retainInfo flags set, should output 16 fields")
-  	} else {
-  		t.Error("NOT OK: With both keepId and retainInfo flags set, should output 16 fields", resultRow)
+  	if len(resultRow) != 17 {
+  		t.Error("With keepPos, keepId, and keepInfo flags set, should output 17 fields", resultRow)
   	}
+
+  	if resultRow[len(resultRow) - 4] != "1001" {
+			t.Error("with keepPos, should get original input position as first optional field")
+		}
 
   	if resultRow[len(resultRow) - 3] == "rs457" {
 			t.Log("OK: add ID field correctly for multiple field, index", altIdx)
@@ -1792,7 +1920,7 @@ func TestOutputMultiallelic(t *testing.T) {
   		} else {
   			t.Error("NOT OK: 4 base deletion not recapitulated", resultRow)
   		}
-			
+
 			if resultRow[6] == "Sample2" {
 				t.Log("OK: Recapitualte 1st allele het", resultRow)
   		} else {
