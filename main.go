@@ -71,7 +71,7 @@ func setup(args []string) *Config {
 	config := &Config{}
 	flag.StringVar(&config.inPath, "in", "", "The input file path (optional: default stdin)")
 	flag.StringVar(&config.famPath, "fam", "", "The fam file path (optional)")
-	flag.StringVar(&config.errPath, "err", "", "The output path for the JSON output (optional)")
+	flag.StringVar(&config.errPath, "err", "", "The log path (optional: default stderr)")
 	flag.StringVar(&config.outPath, "out", "", "The output path (optional: default stdout")
 	flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
 	flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
@@ -145,16 +145,8 @@ func main() {
 	} else {
 		outFh = os.Stdout
 	}
-
 	// make sure it gets closed
 	defer outFh.Close()
-	if config.errPath != "" {
-		var err error
-		os.Stderr, err = os.Open(config.errPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
 
 	if config.cpuProfile != "" {
 		f, err := os.Create(config.cpuProfile)
