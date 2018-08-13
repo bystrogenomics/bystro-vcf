@@ -2,12 +2,12 @@
 
 ## TL;DR
 
-A really fast, simple VCF pre-processor and annotator. Millions of variants per minute.
+Annotate VCF files at millions of variants per minute. Saturates pigz/gunzip on a 4-core CPU.
 
 ```shell
 go get github.com/akotlar/bystro-vcf && go install $_;
 
-pigz -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo | pigz -c - > output
+pigz -p 1 -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo | pigz -c - > output
 ```
 
 <br>
@@ -39,7 +39,19 @@ If you use bystro-vcf please cite https://genomebiology.biomedcentral.com/articl
 ## Performance
 Millions of variants/rows per minute. Performance is dependent on the # of samples.
 
-Amazon i3.2xlarge (4 core), 1K Genomes Phase 3 (2,504 samples): chromosome 1 (6.2M variants) in 5m30s.
+Ex:
+
+Amazon i3.2xlarge (4 core), 1K Genomes Phase 3 (2,504 samples): chromosome 1 (6.2M variants) in <b>~2 minutes 45s</b>
+  - Runs @ ~ pigz -p 1 streaming decompression limit (97% CPU, 2% sys post-Meltdown/Spectre).
+
+```sh
+==> ( time pigz -d -c -p 1 ../../../mnt/annotator/ALL.chr1.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz | bystro-vcf  &> /dev/null ; )
+
+real	2m45.134s
+user	16m20.512s
+sys	0m25.940s
+
+```
 
 <br>
 
@@ -60,7 +72,7 @@ pigz -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." | p
 
 Via ```inPath``` argument:
 ```shell
-bystro-vcf --inPath in.vcf --keepId --keepInfo --allowFilter "PASS,." > out
+bystro-vcf --in in.vcf --keepId --keepInfo --allowFilter "PASS,." > out
 ```
 
 <br>
@@ -116,7 +128,7 @@ Which `FILTER` values to exclude. Comma separated. Defaults to `""`
 <br>
 
 ```shell
---inPath /path/to/uncompressedFile.vcf
+--in /path/to/uncompressedFile.vcf
 ```
 
 An input file path, to an uncompressed VCF file. Defaults to `stdin`
@@ -124,7 +136,15 @@ An input file path, to an uncompressed VCF file. Defaults to `stdin`
 <br>
 
 ```shell
---errPath /path/to/log.txt
+--out <String>
+```
+
+Send the output here instead of STDOUT
+
+<br>
+
+```shell
+--err /path/to/log.txt
 ```
 
 Where to store log messages. Defaults to `stderr`
