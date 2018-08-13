@@ -361,7 +361,7 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 
 	oIdx := -1
 	for line := range queue {
-		if oIdx > 20000 {
+		if oIdx >= 10000 {
 			fileMutex.Lock()
 
 			writer.Write(output.Bytes())
