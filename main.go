@@ -161,7 +161,7 @@ func main() {
 
 	writer := bufio.NewWriter(outFh)
 
-	fmt.Print(stringHeader(config))
+	fmt.Fprintln(writer, stringHeader(config))
 
 	// if config.famPath != "" {
 	//   fillSampleIdx(config.famPath)
@@ -211,7 +211,6 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	// Read buffer
 	workQueue := make(chan string, 100)
 	complete := make(chan bool)
-	var wg sync.WaitGroup
 
 	endOfLineByte, numChars, versionLine, err := parse.FindEndOfLine(reader, "")
 
@@ -297,10 +296,6 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	for i := 0; i < concurrency; i++ {
 		<-complete
 	}
-
-	log.Println("DONE")
-
-	wg.Wait()
 }
 
 func linePasses(record []string, header []string, filterKeys map[string]bool) bool {
