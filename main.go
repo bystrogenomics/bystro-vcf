@@ -52,6 +52,9 @@ const clByte = byte('\n')
 const chrByte = byte('c')
 const zeroByte = byte('0')
 
+// Decimal places to round floats to
+const precision = 3
+
 type Config struct {
 	inPath         string
 	outPath        string
@@ -161,7 +164,7 @@ func main() {
 
 	writer := bufio.NewWriter(outFh)
 
-	fmt.Fprint(writer, stringHeader(config))
+	fmt.Fprintln(writer, stringHeader(config))
 
 	// if config.famPath != "" {
 	//   fillSampleIdx(config.famPath)
@@ -173,12 +176,7 @@ func main() {
 }
 
 func stringHeader(config *Config) string {
-	var output bytes.Buffer
-
-	output.WriteString(strings.Join(header(config), "\t"))
-	output.WriteByte(clByte)
-
-	return output.String()
+	return strings.Join(header(config), string(tabByte))
 }
 
 func header(config *Config) []string {
@@ -333,8 +331,9 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 	var homs []string
 	var hets []string
 	var missing []string
-	var sampleMaf float64
 	var effectiveSamples float64
+	var ac int
+	var an int
 
 	emptyField := config.emptyField
 	fieldDelim := config.fieldDelimiter
@@ -393,7 +392,7 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 			// If no samples are provided, annotate what we can, skipping hets and homs
 			// If samples are provided, but only missing genotypes, skip the site altogether
 			if numSamples > 0 {
-				homs, hets, missing, sampleMaf = makeHetHomozygotes(record, header, iLookup[altIndices[i]])
+				homs, hets, missing, ac, an = makeHetHomozygotes(record, header, iLookup[altIndices[i]])
 
 				if len(homs) == 0 && len(hets) == 0 {
 					continue
@@ -451,7 +450,7 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 				// the bitSize == 64 allows us to round properly past 6 s.f
 				// Note: 'G' requires these numbers to be < 0 for proper precision
 				// (elase only 6 s.f total, rather than after decimal)
-				output.WriteString(strconv.FormatFloat(float64(len(hets))/effectiveSamples, 'G', 3, 64))
+				output.WriteString(strconv.FormatFloat(float64(len(hets))/effectiveSamples, 'G', precision, 64))
 			}
 
 			output.WriteByte(tabByte)
@@ -465,7 +464,7 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 			} else {
 				output.WriteString(strings.Join(homs, fieldDelim))
 				output.WriteByte(tabByte)
-				output.WriteString(strconv.FormatFloat(float64(len(homs))/effectiveSamples, 'G', 3, 64))
+				output.WriteString(strconv.FormatFloat(float64(len(homs))/effectiveSamples, 'G', precision, 64))
 			}
 
 			output.WriteByte(tabByte)
@@ -479,7 +478,7 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 			} else {
 				output.WriteString(strings.Join(missing, fieldDelim))
 				output.WriteByte(tabByte)
-				output.WriteString(strconv.FormatFloat(float64(len(missing))/numSamples, 'G', 3, 64))
+				output.WriteString(strconv.FormatFloat(float64(len(missing))/numSamples, 'G', precision, 64))
 			}
 
 			// Write the sample minor allele frequency
@@ -490,10 +489,15 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 			// Else if there are truly no minor allele
 			output.WriteByte(tabByte)
 
-			if sampleMaf == 0 {
+			output.WriteString(strconv.Itoa(ac))
+			output.WriteByte(tabByte)
+			output.WriteString(strconv.Itoa(an))
+			output.WriteByte(tabByte)
+
+			if ac == 0 {
 				output.WriteByte(zeroByte)
 			} else {
-				output.WriteString(strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+				output.WriteString(strconv.FormatFloat(float64(ac)/float64(an), 'G', precision, 64))
 			}
 
 			/******************* Optional Fields ***********************/
@@ -871,7 +875,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 
 // TODO: decide whether to be more strict about missing genotypes
 // Currently some garbage like .... would be considered "missing"
-func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]string, []string, []string, float64) {
+func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]string, []string, []string, int, int) {
 	simpleGt := !strings.Contains(fields[formatIdx], ":")
 
 	var homs []string
@@ -930,7 +934,7 @@ SAMPLES:
 
 		if len(fields[i]) < 3 {
 			log.Printf("%s:%s : Skipping. Couldn't decode genotype %s (expected at least 3 characters)", fields[chromIdx], fields[posIdx], fields[i])
-			return []string{}, []string{}, []string{}, 0
+			return nil, nil, nil, 0, 0
 		}
 
 		// If for some reason the first allele call isn't . but 2nd is,
@@ -1023,7 +1027,7 @@ SAMPLES:
 			} else {
 				if len(fields[i]) < 4 {
 					log.Printf("%s:%s : Skipping. Couldn't decode genotype %s (expected FORMAT data)", fields[chromIdx], fields[posIdx], fields[i])
-					return []string{}, []string{}, []string{}, 0
+					return nil, nil, nil, 0, 0
 				}
 
 				if fields[i][0:4] == "0/0:" {
@@ -1054,7 +1058,7 @@ SAMPLES:
 		//https://play.golang.org/p/zjUf2rhBHn
 		if len(gt) == 1 {
 			log.Printf("%s:%s : Skipping. Couldn't decode genotype %s", fields[chromIdx], fields[posIdx], fields[i])
-			return []string{}, []string{}, []string{}, 0
+			return nil, nil, nil, 0, 0
 		}
 
 		// We should only get here for triploid+ and multiallelics
@@ -1088,10 +1092,5 @@ SAMPLES:
 		}
 	}
 
-	if totalGtCount == 0 {
-		return homs, hets, missing, 0
-	}
-
-	// We return the sampleMaf solely because I want to make no ploidy assumptions
-	return homs, hets, missing, float64(totalAltCount) / float64(totalGtCount)
+	return homs, hets, missing, totalAltCount, totalGtCount
 }

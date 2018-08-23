@@ -44,9 +44,9 @@ func TestHeader(t *testing.T) {
 	header := stringHeader(&config)
 
 	expected := strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf"}, "\t")
+		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an", "sampleMaf"}, "\t")
 
-	if header == expected+"\n" {
+	if header == expected {
 		t.Log("OK: print header", header, expected)
 	} else {
 		t.Error("NOT OK: print header", header, expected)
@@ -57,9 +57,9 @@ func TestHeader(t *testing.T) {
 	header = stringHeader(&config)
 
 	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf", "vcfPos"}, "\t")
+		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an", "sampleMaf", "vcfPos"}, "\t")
 
-	if header == expected+"\n" {
+	if header == expected {
 		t.Log("OK: print header with --keepPos true", header, expected)
 	} else {
 		t.Error("NOT OK: print header with --keepPostrue true", header, expected)
@@ -70,9 +70,9 @@ func TestHeader(t *testing.T) {
 	header = stringHeader(&config)
 
 	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "sampleMaf", "vcfPos", "id"}, "\t")
+		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an", "sampleMaf", "vcfPos", "id"}, "\t")
 
-	if header == expected+"\n" {
+	if header == expected {
 		t.Log("OK: print header with --keepID true", header, expected)
 	} else {
 		t.Error("NOT OK: print header with --keepID true", header, expected)
@@ -83,10 +83,10 @@ func TestHeader(t *testing.T) {
 	header = stringHeader(&config)
 
 	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an",
 		"sampleMaf", "alleleIdx", "info"}, "\t")
 
-	if header == expected+"\n" {
+	if header == expected {
 		t.Log("OK: print header with --keepInfo true", header, expected)
 	} else {
 		t.Error("NOT OK: print header with --keepInfo true", header, expected)
@@ -97,10 +97,10 @@ func TestHeader(t *testing.T) {
 	header = stringHeader(&config)
 
 	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an",
 		"sampleMaf", "id", "alleleIdx", "info"}, "\t")
 
-	if header == expected+"\n" {
+	if header == expected {
 		t.Log("OK: print header with -keepID true --keepInfo true", header)
 	} else {
 		t.Error("NOT OK: print header with --keepID true --keepInfo true", header)
@@ -111,10 +111,10 @@ func TestHeader(t *testing.T) {
 	header = stringHeader(&config)
 
 	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an",
 		"sampleMaf", "vcfPos", "id", "alleleIdx", "info"}, "\t")
 
-	if header == expected+"\n" {
+	if header == expected {
 		t.Log("OK: print header with --keepPos true --keepID true --keepInfo true", header)
 	} else {
 		t.Error("NOT OK: print header with --keepID true --keepInfo true", header)
@@ -125,10 +125,10 @@ func TestHeader(t *testing.T) {
 	header = stringHeader(&config)
 
 	expected = strings.Join([]string{"chrom", "pos", "type", "ref", "alt", "trTv", "heterozygotes",
-		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness",
+		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an",
 		"sampleMaf", "vcfPos", "alleleIdx", "info"}, "\t")
 
-	if header == expected+"\n" {
+	if header == expected {
 		t.Log("OK: print header with --keepPos true --keepID false --keepInfo true", header)
 	} else {
 		t.Error("NOT OK: print header with --keepID true --keepInfo true", header)
@@ -552,7 +552,9 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields := append(sharedFieldsGT, "0|0", "0|0", "0|0", "0|0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf := makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an := makeHetHomozygotes(fields, header, '1')
+
+	sampleMaf := float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 0 && len(missing) == 0 {
 		t.Log("OK: Homozygous reference samples are skipped")
@@ -560,7 +562,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: 0 alleles give unexpected results", actualHoms, actualHets, missing)
 	}
 
-	if sampleMaf == 0 {
+	if ac == 0 && an == 8 && sampleMaf == 0 {
 		t.Log("OK: sampleMaf should be 0 for all reference sites", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	} else {
 		t.Error("NOT OK: sampleMaf should be 0 for all reference sites", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
@@ -569,7 +571,9 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "0|1", "0|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '1')
+
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 4 && len(missing) == 0 {
 		t.Log("OK: handles hets")
@@ -577,16 +581,38 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: 0 alleles give unexpected results", actualHoms, actualHets, missing)
 	}
 
-	if sampleMaf == float64(4)/float64(8) {
+	if ac == 4 && an == 8 && sampleMaf == float64(4)/float64(8) {
 		t.Log("OK: sampleMaf should be .5 for 0|1, 0|1, 0|1, 0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	} else {
 		t.Error("NOT OK: sampleMaf miscounted for hets")
 	}
 
+	// Expect 0 genotypes, 0 maf
+	fields = append(sharedFieldsGT, ".|.", ".|.", ".|1", "1|.")
+
+	// The allele index we want to test is always 1...unless it's a multiallelic site
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '1')
+
+	sampleMaf = 0
+
+	if len(actualHoms) == 0 && len(actualHets) == 0 && len(missing) == 4 {
+		t.Log("OK: handles hets")
+	} else {
+		t.Error("NOT OK: 0 alleles give unexpected results", actualHoms, actualHets, missing)
+	}
+
+	if ac == 0 && an == 0 {
+		t.Log("OK: sampleMaf should be 0 for all-missing genotypes", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	} else {
+		t.Error("NOT OK: sampleMaf miscounted for all-missing genotypes")
+	}
+
 	fields = append(sharedFieldsGT, ".|1", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '1')
+
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 3 && len(missing) == 1 {
 		t.Log("OK: GT's containing missing data are entirely uncertain, therefore skipped. Missing genotypes are called if any of the calls are missing")
@@ -594,7 +620,9 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle missing data", actualHoms, actualHets, missing)
 	}
 
-	if sampleMaf == float64(3)/float64(6) {
+	// Note: Bystro currently drops both alleles if one is missing
+	// So AN is 6 not 7
+	if ac == 3 && an == 6 && sampleMaf == float64(3)/float64(6) {
 		t.Log("OK: sampleMaf should be .5 for .|1, 0|1, 0|1, 0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	} else {
 		t.Error("NOT OK: sampleMaf miscounted for hets in presence of missing data")
@@ -603,7 +631,9 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|.", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '1')
+
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 3 && len(missing) == 1 {
 		t.Log("OK: GT's containing missing data are entirely uncertain, therefore skipped. Missing genotypes are called if any of the calls are missing")
@@ -611,7 +641,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle missing data", actualHoms, actualHets)
 	}
 
-	if sampleMaf == float64(3)/float64(6) {
+	if ac == 3 && an == 6 && sampleMaf == float64(3)/float64(6) {
 		t.Log("OK: sampleMaf should be .5 for 1|., 0|1, 0|1, 0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	} else {
 		t.Error("NOT OK: sampleMaf miscounted for hets in presence of missing data")
@@ -620,7 +650,9 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|1", "1|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '1')
+
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 2 && len(actualHets) == 2 {
 		t.Log("OK: handles homs and hets")
@@ -628,7 +660,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
-	if sampleMaf == float64(6)/float64(8) {
+	if ac == 6 && an == 8 && sampleMaf == float64(6)/float64(8) {
 		t.Log("OK: sampleMaf should be 6/8 for 1|1, 1|1, 0|1, 0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	} else {
 		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
@@ -637,7 +669,9 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '1')
+
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 3 {
 		t.Log("OK: a sample heterozygous for a wanted allele is heterozygous for that allele even if its other allele is unwanted (for multiallelic phasing)")
@@ -645,7 +679,10 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
-	if sampleMaf == float64(5)/float64(8) {
+	// NOTE: an is 8, even for the sample that doesn't have the allele
+	// because it the sum of the numerators of all alleles / non-missing an at that
+	// site, must be == total_ac/non_missing_an
+	if ac == 5 && an == 8 && sampleMaf == float64(5)/float64(8) {
 		t.Log("OK: sampleMaf should be 5/8 for 1|2, 1|1, 0|1, 0|1 and allele 1, because we consider only the allele being counted", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	} else {
 		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture in multiallelic case", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
@@ -654,7 +691,8 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '2')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '2')
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: Het / homozygous status is based purely on the wanted allele, rather than total non-ref count")
@@ -662,7 +700,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
-	if sampleMaf == float64(1)/float64(8) {
+	if ac == 1 && an == 8 && sampleMaf == float64(1)/float64(8) {
 		t.Log("OK: sampleMaf should be 1/8 for 1|2, 1|1, 0|1, 0|1 and allele 2", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	} else {
 		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture in multiallelic case", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
@@ -671,7 +709,8 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "1|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '2')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '2')
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: handles complicated GTs, with non-1 alleles", fields)
@@ -679,10 +718,17 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
+	if ac == 1 && an == 8 && sampleMaf == float64(1)/float64(8) {
+		t.Log("OK: sampleMaf should be 1/8 for 1|2, 1|1, 0|1, 0|1 and allele 2, even with gq or gl strings", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	} else {
+		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture in multiallelic case", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	}
+
 	fields = append(sharedFieldsGTcomplex, "1|2|1:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '2')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '2')
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: Complicated GT: Triploids are considered het if only 1 present desired allele", fields)
@@ -690,10 +736,17 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
+	if ac == 1 && an == 9 && sampleMaf == float64(1)/float64(9) {
+		t.Log("OK: sampleMaf should be 1/9 for 1|2|1, 1|1, 0|1, 0|1 and allele 2, even with gq or gl strings", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	} else {
+		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture in multiallelic triploid case", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	}
+
 	fields = append(sharedFieldsGT, "1|2|1", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '2')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '2')
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
 		t.Log("OK: Triploids are considered het if only 1 present desired allele")
@@ -701,10 +754,17 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
+	if ac == 1 && an == 9 && sampleMaf == float64(1)/float64(9) {
+		t.Log("OK: sampleMaf should be 1/9 for 1|2|1, 1|1, 0|1, 0|1 and allele 2", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	} else {
+		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture in multiallelic triploid case", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	}
+
 	fields = append(sharedFieldsGTcomplex, "2|2|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '2')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '2')
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
 		t.Log("OK: Complicated GT: Triploids are considered hom only if all alleles present are desired", fields)
@@ -712,15 +772,28 @@ func TestMakeHetHomozygotes(t *testing.T) {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
 	}
 
+	if ac == 3 && an == 9 && sampleMaf == float64(3)/float64(9) {
+		t.Log("OK: sampleMaf should be 3/9 for 2|2|2, 1|1, 0|1, 0|1 and allele 2, even with gq or gl strings", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	} else {
+		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture in multiallelic triploid case", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	}
+
 	fields = append(sharedFieldsGT, "2|2|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '2')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '2')
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
 		t.Log("OK: Triploids are considered hom only if all alleles present are desired")
 	} else {
 		t.Error("NOT OK: Fails to handle homs and hets", actualHoms, actualHets)
+	}
+
+	if ac == 3 && an == 9 && sampleMaf == float64(3)/float64(9) {
+		t.Log("OK: sampleMaf should be 1/9 for 2|2|2, 1|1, 0|1, 0|1 and allele 2, without gq or gl strings", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
+	} else {
+		t.Error("NOT OK: sampleMaf miscounted for hets + homs admixture in multiallelic triploid case", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 	}
 }
 
@@ -735,7 +808,8 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields := append(sharedFieldsGT, "0", ".", "1", "0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf := makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an := makeHetHomozygotes(fields, header, '1')
+	sampleMaf := float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
 		t.Log("OK: Haploid non-reference sites called homozygous")
@@ -743,7 +817,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 		t.Error("NOT OK: Haploid non-reference sites called homozygous", actualHoms, actualHets, missing)
 	}
 
-	if sampleMaf == float64(1)/float64(3) {
+	if ac == 1 && an == 3 && sampleMaf == float64(1)/float64(3) {
 		t.Log("OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid", sampleMaf)
 	} else {
 		t.Error("NOT OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid", sampleMaf)
@@ -752,7 +826,8 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "0:1", ".:1", "1:1", "0:1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, sampleMaf = makeHetHomozygotes(fields, header, '1')
+	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, '1')
+	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
 		t.Log("OK: Haploid non-reference sites called heterozygous in complex case", sampleMaf)
@@ -760,7 +835,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 		t.Error("NOT OK: Haploid non-reference sites called heterozygous in complex case", sampleMaf)
 	}
 
-	if sampleMaf == float64(1)/float64(3) {
+	if ac == 1 && an == 3 && sampleMaf == float64(1)/float64(3) {
 		t.Log("OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid complex GT")
 	} else {
 		t.Error("NOT OK: Calculate sample maf as 1/3 when 1 non-ref allele, 1 misisng, in haploid complex GT")
@@ -772,6 +847,51 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 // homozyogtes: 8, homozygosity: 9, missingGenos: 10, missingness: 11, sampleMaf: 12,
 // id: 13 (if keepID), alleleIdx: 14 (if keepID and keepInfo), info: 15 (if keepID and keepInfo)
 // if keepInfo only: alleleIdx: 13, info: 14
+
+func TestHandlesAllMissing(t *testing.T) {
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4"}, "\t")
+
+	record1 := strings.Join([]string{"10", "1000", "rs123", "A", "T", "100", "PASS",
+		"AC=1", "GT", "./.", "./1", "1/.", "./0"}, "\t")
+	record2 := strings.Join([]string{"10", "1000", "rs124", "A", "C", "100", "PASS",
+		"AC=1", "GT", ".|.", "1|.", "1|.", ".|0"}, "\t")
+
+	lines := versionLine + "\n" + header + "\n" + record1 + "\n" + record2 + "\n"
+
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	config := Config{emptyField: "!", fieldDelimiter: ";"}
+
+	expHeader := strings.Split(stringHeader(&config), string(tabByte))
+	expLen := 15
+
+	// keepPos adds 1 field, keepID adds 1, and keepInfo adds 2 (alleleIdx, info)
+	if len(expHeader) != expLen {
+		t.Errorf("with keepID and keepInfo, expect %d fields in header output", expLen)
+	}
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	results := bufio.NewScanner(byteBuf)
+
+	readVcf(&config, reader, w)
+	w.Flush()
+
+	idx := 0
+	for results.Scan() {
+		idx++
+	}
+
+	if idx == 0 {
+		t.Log("OK: Skips sites with only missing genotypes")
+	} else {
+		t.Error("NOT OK: Skips sites with only missing genotypes")
+	}
+}
+
 func TestOutputsInfo(t *testing.T) {
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}, "\t")
@@ -782,7 +902,14 @@ func TestOutputsInfo(t *testing.T) {
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", keepID: false, keepInfo: true}
 
-	// outFh := os.Open('./test.vcf')
+	expHeader := strings.Split(stringHeader(&config), string(tabByte))
+
+	// --keepInfo adds 'alleleIdx' & 'info' fields
+	expLen := 15 + 2
+
+	if len(expHeader) != expLen {
+		t.Errorf("Expected header to have %d fields with --keepInfo flag set", expLen)
+	}
 
 	var b bytes.Buffer
 	w := bufio.NewWriter(&b)
@@ -809,10 +936,8 @@ func TestOutputsInfo(t *testing.T) {
 			t.Error("Transitions should have value 1", resultRow)
 		}
 
-		if len(resultRow) == 15 {
-			t.Log("OK: With keepInfo flag set, but not keepID, should output 15 fields", resultRow)
-		} else {
-			t.Error("NOT OK: With keepInfo flag set, but not keepID, should output 15 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-2] == "0" && resultRow[len(resultRow)-1] == "AC=1" {
@@ -849,10 +974,8 @@ func TestOutputsInfo(t *testing.T) {
 			t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
 		}
 
-		if len(resultRow) == 15 {
-			t.Log("OK: With keepInfo flag set, but not keepID, should output 15 fields", resultRow)
-		} else {
-			t.Error("NOT OK: With keepInfo flag set, but not keepID, should output 15 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		altIdx, err := strconv.Atoi(resultRow[len(resultRow)-2])
@@ -884,6 +1007,13 @@ func TestOutputsId(t *testing.T) {
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", keepID: true, keepInfo: false}
 
+	expHeader := strings.Split(stringHeader(&config), string(tabByte))
+	expLen := 15 + 1
+
+	if len(expHeader) != expLen {
+		t.Errorf("NOT OK: With keepID set, expect %d fields in header output: %v", expLen, expHeader)
+	}
+
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
 
@@ -905,10 +1035,8 @@ func TestOutputsId(t *testing.T) {
 			t.Log("Parsed transition with value 1", resultRow)
 		}
 
-		if len(resultRow) == 14 {
-			t.Log("OK: With keepID flag set, but not keepInfo, should output 14 fields")
-		} else {
-			t.Error("NOT OK: With keepID flag set, but not keepInfo, should output 14 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-1] == "rs123" {
@@ -944,10 +1072,8 @@ func TestOutputsId(t *testing.T) {
 			t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
 		}
 
-		if len(resultRow) == 14 {
-			t.Log("OK: With keepID flag set, but not keepInfo, should output 14 fields")
-		} else {
-			t.Error("NOT OK: With keepID flag set, but not keepInfo, should output 14 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-1] == "rs456" {
@@ -974,6 +1100,15 @@ func TestOutputsVcfPos(t *testing.T) {
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", keepPos: true}
 
+	expHeader := strings.Split(stringHeader(&config), string(tabByte))
+
+	// keepPos adds 1 field
+	expLen := 15 + 1
+
+	if len(expHeader) != expLen {
+		t.Errorf("with keepID and keepInfo, expect %d fields in header output", expLen)
+	}
+
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
 
@@ -985,14 +1120,14 @@ func TestOutputsVcfPos(t *testing.T) {
 	for results.Scan() {
 		resultRow := strings.Split(results.Text(), "\t")
 
-		if len(resultRow) != 14 {
-			t.Error("With keepPos only set, expect 14 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		vcfPos, err := strconv.Atoi(resultRow[len(resultRow)-1])
 
 		if err != nil || vcfPos != 1000 {
-			t.Error("Deletions should get the vcf input position with --keepPos, in the vcfPos column", resultRow)
+			t.Error("NOT OK: Deletions should get the vcf input position with --keepPos, in the vcfPos column", resultRow)
 		}
 	}
 
@@ -1014,14 +1149,14 @@ func TestOutputsVcfPos(t *testing.T) {
 		resultRow := strings.Split(results.Text(), "\t")
 		index++
 
-		if len(resultRow) != 14 {
-			t.Error("With keepPos flag set only, each allele in multiallelics should have 14 fields in its row", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		vcfPos, err := strconv.Atoi(resultRow[len(resultRow)-1])
 
 		if err != nil || vcfPos != 1003 {
-			t.Error("Each allele in a multiallelic should get the vcf input position with --keepPos, in the vcfPos column", resultRow)
+			t.Error("NOT OK: Each allele in a multiallelic should get the vcf input position with --keepPos, in the vcfPos column", resultRow)
 		}
 	}
 
@@ -1042,6 +1177,14 @@ func TestOutputsVcfPosIdAndInfo(t *testing.T) {
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", keepPos: true, keepID: true, keepInfo: true}
 
+	expHeader := strings.Split(stringHeader(&config), string(tabByte))
+	// KeepInfo adds 2 fields, alleleIdx and info
+	expLen := 19
+
+	if len(expHeader) != expLen {
+		t.Errorf("NOT OK: With keepID and keepInfo, expect %d fields in header output: %v", expLen, expHeader)
+	}
+
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
 
@@ -1053,8 +1196,8 @@ func TestOutputsVcfPosIdAndInfo(t *testing.T) {
 	for results.Scan() {
 		resultRow := strings.Split(results.Text(), "\t")
 
-		if len(resultRow) != 17 {
-			t.Error("With keepID, keepInfo, and keepPos flags set, expected 18 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		vcfPos, err := strconv.Atoi(resultRow[len(resultRow)-4])
@@ -1092,6 +1235,14 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", keepPos: true, keepID: true, keepInfo: true}
 
+	expHeader := strings.Split(stringHeader(&config), string(tabByte))
+	expLen := 19
+
+	// keepPos adds 1 field, keepID adds 1, and keepInfo adds 2 (alleleIdx, info)
+	if len(expHeader) != expLen {
+		t.Errorf("with keepID and keepInfo, expect %d fields in header output", expLen)
+	}
+
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
 
@@ -1111,8 +1262,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("Transversions should have value 2", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With both keepID and retainInfo flags set, should output 16 fields")
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1000" {
@@ -1171,8 +1322,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("NOT OK: Couldn't recapitualte the missingness", resultRow)
 		}
 
+		ac, _ := strconv.Atoi(resultRow[12])
+		an, _ := strconv.Atoi(resultRow[13])
+		sampleMaf := resultRow[14]
+		eMaf := strconv.FormatFloat(float64(3)/float64(6), 'G', precision, 64)
+
 		// sampleMaf ; 2 alleles for 1|1, 1 allele for 0|1 and 0 in denominator for .|.
-		if resultRow[12] == strconv.FormatFloat(float64(3)/float64(6), 'G', 3, 64) {
+		if ac == 3 && an == 6 && sampleMaf == eMaf {
 			t.Log("OK: sampleMaf will count homozygotes, heterozygotes, and will exclude missing alleles from denominator", resultRow)
 		} else {
 			t.Error("NOT OK: sampleMaf will count homozygotes, heterozygotes, and will exclude missing alleles from denominator", resultRow)
@@ -1202,8 +1358,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With keepPos, keepID, and keepInfo flags set, should output 17 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1000" {
@@ -1258,8 +1414,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(2)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 3, 64) {
+			if ac == 2 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1280,8 +1441,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(1)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 3, 64) {
+			if ac == 1 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1317,8 +1483,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With keepPos, keepID, and keepInfo flags set, should output 17 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1000" {
@@ -1373,13 +1539,20 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+
+			eMaf := strconv.FormatFloat(float64(2)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 3, 64) {
+			if ac == 2 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			}
 		} else if index == 1 {
+			// The "2" allele
 			// heterozygosity
 			// the denominator excludes the missing samples
 			if resultRow[7] == strconv.FormatFloat(float64(1)/float64(3), 'G', 3, 64) {
@@ -1395,8 +1568,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(1)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 3, 64) {
+			if ac == 1 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1432,8 +1610,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With keepPos, keepID, and keepInfo flags set, should output 17 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1000" {
@@ -1472,7 +1650,9 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("NOT OK: Missingness is identical for each allele in multiallelic output", resultRow)
 		}
 
+		// This will be the first allele encountered (by ALT field comma-separated order
 		if index == 0 {
+			//
 			// heterozygosity
 			if resultRow[7] == "0" {
 				t.Log("OK: Recapitualte the heterozygosity in multiallelic case for 1st allele", resultRow)
@@ -1488,8 +1668,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(2)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 3, 64) {
+			if ac == 2 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1510,8 +1695,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(1)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 3, 64) {
+			if ac == 1 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1548,8 +1738,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With keepPos, keepID, and keepInfo flags set, should output 17 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1000" {
@@ -1604,8 +1794,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(2)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 3, 64) {
+			if ac == 2 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1633,8 +1828,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: couldn't recapitulate missingness even when the misssing genotype doesn't have the expected FORMAT data", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(1)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 0|2 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 3, 64) {
+			if ac == 1 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1673,8 +1873,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With keepPos, keepID, and keepInfo flags set, should output 17 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1001" {
@@ -1729,8 +1929,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(2)/float64(10), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(10), 'G', 3, 64) {
+			if ac == 2 && an == 10 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1751,8 +1956,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(3)/float64(10), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 2|2
-			if resultRow[12] == strconv.FormatFloat(float64(3)/float64(10), 'G', 3, 64) {
+			if ac == 3 && an == 10 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1791,8 +2001,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With keepPos, keepID, and keepInfo flags set, should output 17 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1002" {
@@ -1847,8 +2057,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(2)/float64(10), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(10), 'G', 3, 64) {
+			if ac == 2 && an == 10 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1869,8 +2084,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(3)/float64(10), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 2|2
-			if resultRow[12] == strconv.FormatFloat(float64(3)/float64(10), 'G', 3, 64) {
+			if ac == 3 && an == 10 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1909,8 +2129,8 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		if len(resultRow) != 17 {
-			t.Error("With keepPos, keepID, and keepInfo flags set, should output 17 fields", resultRow)
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if resultRow[len(resultRow)-4] != "1001" {
@@ -1965,8 +2185,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 1st allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(2)/float64(10), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 1|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(10), 'G', 3, 64) {
+			if ac == 2 && an == 10 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -1987,8 +2212,13 @@ func TestOutputsSamplesVcfPosIdAndInfo(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the homozygosity in multiallelic case for 2nd allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(3)/float64(10), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 2|2
-			if resultRow[12] == strconv.FormatFloat(float64(3)/float64(10), 'G', 3, 64) {
+			if ac == 3 && an == 10 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
@@ -2017,6 +2247,13 @@ func TestOutputMultiallelic(t *testing.T) {
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters}
 
+	expHeader := strings.Split(stringHeader(&config), string(tabByte))
+	expLen := 15
+
+	if len(expHeader) != expLen {
+		t.Errorf("Expect %d fields in base header %v", expLen, expHeader)
+	}
+
 	index := -1
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
@@ -2036,6 +2273,10 @@ func TestOutputMultiallelic(t *testing.T) {
 
 		if resultRow[5] != "0" {
 			t.Error("Multiallelics should be called neither transitions nor transversions with value 0", resultRow)
+		}
+
+		if len(resultRow) != expLen {
+			t.Errorf("NOT OK: Expected %d fields: %v", expLen, resultRow)
 		}
 
 		if index == 0 {
@@ -2086,11 +2327,16 @@ func TestOutputMultiallelic(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the missingness in multiallelic case", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(1)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 0|1 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(1)/float64(6), 'G', 3, 64) {
+			if ac == 1 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
 			} else {
-				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", resultRow)
+				t.Error("NOT OK: sampleMaf in multialellic case for 1st allele will count in denominator all multiallelic alleles, but will exclude missing alleles", ac, an, sampleMaf, float64(1)/float64(6), resultRow)
 			}
 		}
 
@@ -2142,8 +2388,13 @@ func TestOutputMultiallelic(t *testing.T) {
 				t.Error("NOT OK: Couldn't recapitualte the missingness in multiallelic case for 2nd allele", resultRow)
 			}
 
+			ac, _ := strconv.Atoi(resultRow[12])
+			an, _ := strconv.Atoi(resultRow[13])
+			sampleMaf := resultRow[14]
+			eMaf := strconv.FormatFloat(float64(2)/float64(6), 'G', precision, 64)
+
 			// sampleMaf ; 2 alleles for 2|2 and 0 in denominator for .|.
-			if resultRow[12] == strconv.FormatFloat(float64(2)/float64(6), 'G', 3, 64) {
+			if ac == 2 && an == 6 && sampleMaf == eMaf {
 				t.Log("OK: sampleMaf in multialellic case for 2nd allele", resultRow)
 			} else {
 				t.Error("NOT OK: sampleMaf in multialellic case for 2nd allele", resultRow)
@@ -2271,7 +2522,6 @@ func TestOutputComplexDel(t *testing.T) {
 			t.Error("chromosome should have chr appended", resultRow)
 		}
 
-		fmt.Println(index, resultRow)
 		if index == 0 {
 			if resultRow[refIdx] == "C" && resultRow[posIdx] == "874816" && resultRow[altIdx] == "+CCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT" {
 				t.Log("OK: Intercolated insertion +CCCCTCATCACCTCCCCAGCCACGGTGAGGACCCACCCTGGCATGATCT in complex, multiallelic microsatellite recapitulated", resultRow)
