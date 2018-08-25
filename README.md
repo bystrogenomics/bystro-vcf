@@ -14,17 +14,16 @@ pigz -p 1 -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo | pigz -c - > output
 
 ## Description
 
-
-
 Performs several important functions:
-1) Splits multiallelics and MNP alleles, keeping track of each allele's index with respect to the original alleles for downstream INFO property segregation
-2) Performs QC on variants: checks whether allele contains ACTG, that padding bases match reference, and more
-3) Allows filtering of variants by any number of FILTER properties (by default allows PASS/. variants)
-4) Normalizes indel representations by removing padding, left shifting alleles to their parsimonious representations
-5) Calculates whether site is transition, transversion, or neither
-6) Processes all available samples
-    - calculates homozygosity, heterozygosity, missingness
-    - labels samples as homozygous, heterozygous, or missing
+
+1. Splits multiallelics and MNP alleles, keeping track of each allele's index with respect to the original alleles for downstream INFO property segregation
+2. Performs QC on variants: checks whether allele contains ACTG, that padding bases match reference, and more
+3. Allows filtering of variants by any number of FILTER properties (by default allows PASS/. variants)
+4. Normalizes indel representations by removing padding, left shifting alleles to their parsimonious representations
+5. Calculates whether site is transition, transversion, or neither
+6. Processes all available samples
+   - calculates homozygosity, heterozygosity, missingness
+   - labels samples as homozygous, heterozygous, or missing
 
 <br>
 
@@ -32,17 +31,19 @@ Performs several important functions:
 
 bystro-vcf is used to pre-proces VCF files for [Bystro](https://bystro.io) ([github](https://github.com/akotlar/bystro))
 
-If you use bystro-vcf please cite https://genomebiology.biomedcentral.com/articles/10.1186/s13059-018-1387-3 
+If you use bystro-vcf please cite https://genomebiology.biomedcentral.com/articles/10.1186/s13059-018-1387-3
 
 <br>
 
 ## Performance
+
 Millions of variants/rows per minute. Performance is dependent on the # of samples.
 
 Ex:
 
 Amazon i3.2xlarge (4 core), 1K Genomes Phase 3 (2,504 samples): chromosome 1 (6.2M variants) in <b>~2 minutes 45s</b>
-  - Runs @ ~ pigz -p 1 streaming decompression limit (97% CPU, 2% sys post-Meltdown/Spectre).
+
+- Runs @ ~ pigz -p 1 streaming decompression limit (97% CPU, 2% sys post-Meltdown/Spectre).
 
 ```sh
 ==> ( time pigz -d -c -p 1 ../../../mnt/annotator/ALL.chr1.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz | bystro-vcf  &> /dev/null ; )
@@ -50,7 +51,6 @@ Amazon i3.2xlarge (4 core), 1K Genomes Phase 3 (2,504 samples): chromosome 1 (6.
 real	2m45.134s
 user	16m20.512s
 sys	0m25.940s
-
 ```
 
 <br>
@@ -66,11 +66,13 @@ go get github.com/akotlar/bystro-vcf && go install $_;
 ## Use
 
 Via pipe:
+
 ```shell
 pigz -d -c in.vcf.gz | bystro-vcf --keepId --keepInfo --allowFilter "PASS,." | pigz -c - > out.gz
 ```
 
-Via ```inPath``` argument:
+Via `inPath` argument:
+
 ```shell
 bystro-vcf --in in.vcf --keepId --keepInfo --allowFilter "PASS,." > out
 ```
@@ -78,6 +80,7 @@ bystro-vcf --in in.vcf --keepId --keepInfo --allowFilter "PASS,." > out
 <br>
 
 ## Output
+
 ```tsv
 chrom <String>   pos <Int>   type <String[SNP|DEL|INS|MULTIALLELIC]>    ref <String>    alt <String>    trTv <Int[0|1|2]>     heterozygotes <String>     heterozygosity <Float64>    homozygotes <String>     homozygosity <Float64>     missingGenos <String>    missingness <Float64>    sampleMaf <Float64>    id <String?>    alleleIndex <Int?>   info <String?>
 ```
@@ -98,14 +101,15 @@ Retain the "ID" field in the output.
 --keepInfo <Bool>
 ```
 
-Retain the "INFO" field in the output. 
-  - Since we decompose multiallelics, an "alleleIdx" field is added to the output. It contains the 0-based index of that allele in the multiallelic
-  - This is necessary for downstream programs to decompose the INFO field per-allele
+Retain the "INFO" field in the output.
 
+- Since we decompose multiallelics, an "alleleIdx" field is added to the output. It contains the 0-based index of that allele in the multiallelic
+- This is necessary for downstream programs to decompose the INFO field per-allele
 
 Results in 2 output fields, following `missingGenos` or `id` should `--keepId` be set
-  1. `alleleIdx` will contain the index of allele in a split multiallelic. 0 by default.
-  2. `info` will contain the entire `INFO` string
+
+1. `alleleIdx` will contain the index of allele in a split multiallelic. 0 by default.
+2. `info` will contain the entire `INFO` string
 
 <br>
 
@@ -114,6 +118,7 @@ Results in 2 output fields, following `missingGenos` or `id` should `--keepId` b
 ```
 
 Which `FILTER` values to keep. Comma separated. Defaults to `"PASS,."`
+
 - Similar to [https://samtools.github.io/bcftools/bcftools.html](bcftools) `-f, --apply-filters LIST`
 
 <br>
@@ -123,6 +128,7 @@ Which `FILTER` values to keep. Comma separated. Defaults to `"PASS,."`
 ```
 
 Which `FILTER` values to exclude. Comma separated. Defaults to `""`
+
 - Opposite of [https://samtools.github.io/bcftools/bcftools.html](bcftools) `-f, --apply-filters LIST`
 
 <br>

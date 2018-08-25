@@ -12,7 +12,7 @@ import (
 func TestKeepFlagsTrue(t *testing.T) {
 	args := []string{
 		"--keepInfo",
-		"--keepID",
+		"--keepId",
 		"--keepPos",
 		"--in", "/path/to/file",
 		"--err", "/path/to/err",
@@ -73,9 +73,9 @@ func TestHeader(t *testing.T) {
 		"heterozygosity", "homozygotes", "homozygosity", "missingGenos", "missingness", "ac", "an", "sampleMaf", "vcfPos", "id"}, "\t")
 
 	if header == expected {
-		t.Log("OK: print header with --keepID true", header, expected)
+		t.Log("OK: print header with --keepId true", header, expected)
 	} else {
-		t.Error("NOT OK: print header with --keepID true", header, expected)
+		t.Error("NOT OK: print header with --keepId true", header, expected)
 	}
 
 	config = Config{keepPos: false, keepID: false, keepInfo: true}
@@ -103,7 +103,7 @@ func TestHeader(t *testing.T) {
 	if header == expected {
 		t.Log("OK: print header with -keepID true --keepInfo true", header)
 	} else {
-		t.Error("NOT OK: print header with --keepID true --keepInfo true", header)
+		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
 	}
 
 	config = Config{keepPos: true, keepID: true, keepInfo: true}
@@ -115,9 +115,9 @@ func TestHeader(t *testing.T) {
 		"sampleMaf", "vcfPos", "id", "alleleIdx", "info"}, "\t")
 
 	if header == expected {
-		t.Log("OK: print header with --keepPos true --keepID true --keepInfo true", header)
+		t.Log("OK: print header with --keepPos true --keepId true --keepInfo true", header)
 	} else {
-		t.Error("NOT OK: print header with --keepID true --keepInfo true", header)
+		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
 	}
 
 	config = Config{keepPos: true, keepID: false, keepInfo: true}
@@ -129,9 +129,9 @@ func TestHeader(t *testing.T) {
 		"sampleMaf", "vcfPos", "alleleIdx", "info"}, "\t")
 
 	if header == expected {
-		t.Log("OK: print header with --keepPos true --keepID false --keepInfo true", header)
+		t.Log("OK: print header with --keepPos true --keepId false --keepInfo true", header)
 	} else {
-		t.Error("NOT OK: print header with --keepID true --keepInfo true", header)
+		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
 	}
 }
 
