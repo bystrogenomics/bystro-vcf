@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -19,7 +20,7 @@ import (
 
 var fileMutex sync.Mutex
 
-const concurrency int = 8
+var concurrency = runtime.NumCPU()
 
 const (
 	chromIdx  int = 0
