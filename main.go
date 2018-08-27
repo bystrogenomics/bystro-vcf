@@ -59,6 +59,7 @@ const precision = 3
 type Config struct {
 	inPath         string
 	outPath        string
+	sampleListPath string
 	famPath        string
 	errPath        string
 	emptyField     string
@@ -77,6 +78,7 @@ func setup(args []string) *Config {
 	flag.StringVar(&config.famPath, "fam", "", "The fam file path (optional)")
 	flag.StringVar(&config.errPath, "err", "", "The log path (optional: default stderr)")
 	flag.StringVar(&config.outPath, "out", "", "The output path (optional: default stdout")
+	flag.StringVar(&config.sampleListPath, "sample", "", "The output path of the sample list (optional: default stdout")
 	flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
 	flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
 	flag.BoolVar(&config.keepID, "keepId", false, "Retain the ID field in output")
@@ -264,6 +266,12 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	// Remove periods from sample names
 	parse.NormalizeHeader(header)
 
+	err = writeSampleListIfWanted(config, header)
+
+	if err != nil {
+		log.Fatal("Couldn't write sample list file")
+	}
+
 	// Read the lines into the work queue.
 	go func() {
 		for {
@@ -297,6 +305,39 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	}
 }
 
+func writeSampleListIfWanted(config *Config, header []string) error {
+	if config.sampleListPath == "" {
+		return nil
+	}
+
+	outFh, err := os.OpenFile(config.sampleListPath, os.O_WRONLY|os.O_CREATE, 0644)
+
+	if err != nil {
+		return err
+	}
+
+	// make sure it gets closed
+	defer outFh.Close()
+	writer := bufio.NewWriter(outFh)
+
+	writeSampleList(writer, header)
+
+	return nil
+}
+
+func writeSampleList(writer *bufio.Writer, header []string) {
+	if len(header) < 10 {
+		return
+	}
+
+	for i := 9; i < len(header); i++ {
+		writer.WriteString(header[i])
+		writer.WriteByte(clByte)
+	}
+
+	writer.Flush()
+}
+
 func linePasses(record []string, header []string, filterKeys map[string]bool) bool {
 	return len(record) == len(header) && len(filterKeys) == 0 || filterKeys[record[filterIdx]] == true
 }
@@ -311,8 +352,9 @@ func altIsValid(alt string) bool {
 		if alt[0] != 'A' && alt[0] != 'C' && alt[0] != 'T' && alt[0] != 'G' {
 			return false
 		}
-		for _, val := range alt[1:] {
-			if val != 'A' && val != 'C' && val != 'T' && val != 'G' {
+
+		for i := 1; i < len(alt); i++ {
+			if alt[i] != 'A' && alt[i] != 'C' && alt[i] != 'T' && alt[i] != 'G' {
 				return false
 			}
 		}
