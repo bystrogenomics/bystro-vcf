@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -133,6 +135,127 @@ func TestHeader(t *testing.T) {
 	} else {
 		t.Error("NOT OK: print header with --keepId true --keepInfo true", header)
 	}
+}
+
+func TestWriteSampleListIfWanted(t *testing.T) {
+	config := Config{sampleListPath: "./test.sample_list"}
+
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO", "FORMAT", "Sample1", "Sample2", "Sample3", "Sample4"}, "\t")
+
+	record1 := strings.Join([]string{"10", "1000", "rs123", "A", "T", "100", "PASS",
+		"AC=1", "GT", "./.", "./1", "1/.", "./0"}, "\t")
+	record2 := strings.Join([]string{"10", "1000", "rs124", "A", "C", "100", "PASS",
+		"AC=1", "GT", ".|.", "1|.", "1|.", ".|0"}, "\t")
+
+	lines := versionLine + "\n" + header + "\n" + record1 + "\n" + record2 + "\n"
+
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	readVcf(&config, reader, w)
+
+	inFh, err := os.Open("./test.sample_list")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer inFh.Close()
+
+	outReader := bufio.NewScanner(inFh)
+
+	idx := -1
+	for outReader.Scan() {
+		sample := outReader.Text()
+		idx++
+
+		if idx == 0 && sample != "Sample1" {
+			t.Error("Couldn't write sample list")
+		}
+
+		if idx == 1 && sample != "Sample2" {
+			t.Error("Couldn't write sample list")
+			continue
+		}
+
+		if idx == 2 && sample != "Sample3" {
+			t.Error("Couldn't write sample list")
+			continue
+		}
+
+		if idx == 3 && sample != "Sample4" {
+			t.Error("Couldn't write sample list")
+			continue
+		}
+
+	}
+}
+
+func TestWriteSampleListWhenNoSamples(t *testing.T) {
+	config := Config{sampleListPath: "./test.sample_list_2"}
+
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO"}, "\t")
+
+	record1 := strings.Join([]string{"10", "1000", "rs123", "A", "T", "100", "PASS",
+		"AC=1", "GT"}, "\t")
+	record2 := strings.Join([]string{"10", "1000", "rs124", "A", "C", "100", "PASS",
+		"AC=1", "GT"}, "\t")
+
+	lines := versionLine + "\n" + header + "\n" + record1 + "\n" + record2 + "\n"
+
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	readVcf(&config, reader, w)
+
+	inFh, err := os.Open("./test.sample_list_2")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer inFh.Close()
+
+	outReader := bufio.NewScanner(inFh)
+
+	idx := -1
+	for outReader.Scan() {
+		fmt.Println(outReader.Text())
+		idx++
+	}
+
+	if idx > -1 {
+		t.Error("Should have empty file when no samples exist")
+	}
+}
+
+// TODO: better test of panic
+func TestWriteSampleListWhenNotWanted(t *testing.T) {
+	config := Config{}
+
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+		"FILTER", "INFO"}, "\t")
+
+	record1 := strings.Join([]string{"10", "1000", "rs123", "A", "T", "100", "PASS",
+		"AC=1", "GT"}, "\t")
+	record2 := strings.Join([]string{"10", "1000", "rs124", "A", "C", "100", "PASS",
+		"AC=1", "GT"}, "\t")
+
+	lines := versionLine + "\n" + header + "\n" + record1 + "\n" + record2 + "\n"
+
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	readVcf(&config, reader, w)
 }
 
 func TestUpdateFieldsWithAlt(t *testing.T) {
