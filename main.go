@@ -57,19 +57,20 @@ const zeroByte = byte('0')
 const precision = 3
 
 type Config struct {
-	inPath         string
-	outPath        string
-	sampleListPath string
-	famPath        string
-	errPath        string
-	emptyField     string
-	fieldDelimiter string
-	keepID         bool
-	keepInfo       bool
-	keepQual       bool
-	keepPos        bool
-	cpuProfile     string
-	allowedFilters map[string]bool
+	inPath          string
+	outPath         string
+	sampleListPath  string
+	famPath         string
+	errPath         string
+	emptyField      string
+	fieldDelimiter  string
+	keepID          bool
+	keepInfo        bool
+	keepQual        bool
+	keepPos         bool
+	cpuProfile      string
+	allowedFilters  map[string]bool
+	excludedFilters map[string]bool
 }
 
 func setup(args []string) *Config {
@@ -95,17 +96,24 @@ func setup(args []string) *Config {
 		a = args
 	}
 	flag.CommandLine.Parse(a)
-	config.allowedFilters = map[string]bool{"PASS": true, ".": true}
-	if *filteredVals != "" {
+
+	if *filteredVals != "" && *filteredVals != "*" {
+		config.allowedFilters = make(map[string]bool)
+
 		for _, val := range strings.Split(*filteredVals, ",") {
-			config.allowedFilters[val] = true
+			config.allowedFilters[strings.TrimSpace(val)] = true
 		}
 	}
+
+	// We don't allow exclude all, that would be nonsensical
 	if *excludeFilterVals != "" {
+		config.excludedFilters = make(map[string]bool)
+
 		for _, val := range strings.Split(*excludeFilterVals, ",") {
-			config.allowedFilters[val] = false
+			config.excludedFilters[strings.TrimSpace(val)] = true
 		}
 	}
+
 	return config
 }
 
@@ -338,8 +346,13 @@ func writeSampleList(writer *bufio.Writer, header []string) {
 	writer.Flush()
 }
 
-func linePasses(record []string, header []string, filterKeys map[string]bool) bool {
-	return len(record) == len(header) && len(filterKeys) == 0 || filterKeys[record[filterIdx]] == true
+func linePasses(record []string, header []string, allowedFilters map[string]bool,
+	excludedFilters map[string]bool) bool {
+	return len(record) == len(header) &&
+		// whitelist: if true it's present in the map
+		(allowedFilters == nil || allowedFilters[record[filterIdx]] == true) &&
+		// blacklist: if false it's not present in the map, and we allow it
+		(excludedFilters == nil || excludedFilters[record[filterIdx]] == false)
 }
 
 func altIsValid(alt string) bool {
@@ -383,6 +396,7 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 	keepID := config.keepID
 	keepInfo := config.keepInfo
 	allowedFilters := config.allowedFilters
+	excludedFilters := config.excludedFilters
 	keepPos := config.keepPos
 
 	if len(header) > 9 {
@@ -412,7 +426,7 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 
 		record = strings.Split(line, "\t")
 
-		if !linePasses(record, header, allowedFilters) {
+		if !linePasses(record, header, allowedFilters, excludedFilters) {
 			continue
 		}
 

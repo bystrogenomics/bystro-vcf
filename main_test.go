@@ -22,6 +22,8 @@ func TestKeepFlagsTrue(t *testing.T) {
 		"--emptyField", ".",
 		"--out", "/path/to/out",
 		"--fieldDelimiter", "&",
+		"--allowFilter", "PASS,., somethingElse ",
+		"--excludeFilter", "unwanted_one, unwanted_two ",
 	}
 
 	config := setup(args)
@@ -38,7 +40,31 @@ func TestKeepFlagsTrue(t *testing.T) {
 	if config.emptyField != "." || config.fieldDelimiter != "&" {
 		t.Error("NOT OK: parse emptyField and fieldDelimiter args")
 	}
+
+	if !(config.allowedFilters["PASS"] && config.allowedFilters["."] && config.allowedFilters["somethingElse"]) {
+		t.Error("NOT OK: can't parse allowFilter")
+	}
+
+	if !(config.excludedFilters["unwanted_one"] && config.excludedFilters["unwanted_two"]) {
+		t.Error("NOT OK: can't parse excludeFilter")
+	}
+
 }
+
+// TODO : update usage of flag to allow testing 2x+
+// func TestWildcardAllowFilter(t *testing.T) {
+// 	log.SetFlags(0)
+// 	args := []string{
+// 		"--allowFilter", "*",
+// 	}
+
+// 	config := setup(args)
+
+// 	if config.allowedFilters != nil {
+// 		t.Error("NOT OK: Expect allowedFilters to be nil when --allowFilter '*' passed")
+// 	}
+
+// }
 
 func TestHeader(t *testing.T) {
 	config := Config{keepID: false, keepInfo: false}
@@ -495,91 +521,42 @@ func TestPassesLine(t *testing.T) {
 	record := []string{"20", "4", ".", "GCG", "G,GCGCG", ".", "PASS", "DP=100"}
 
 	allowedFilters := map[string]bool{"PASS": true, ".": true}
-	actual := linePasses(record, header, allowedFilters)
+	actual := linePasses(record, header, allowedFilters, nil)
 
 	if actual == expect {
-		t.Log("OK: PASS lines pass")
+		t.Log("OK: We can whitelist FILTER values (PASS)")
 	} else {
-		t.Error("NOT OK: PASS lines should pass")
+		t.Error("NOT OK: We can whitelist FILTER values (PASS)")
 	}
 
 	record = []string{"20", "4", ".", "GCG", "G,GCGCG", ".", ".", "DP=100"}
 
-	actual = linePasses(record, header, allowedFilters)
+	actual = linePasses(record, header, allowedFilters, nil)
 
 	if actual == expect {
-		t.Log("OK: lines with missing (.) values under FILTER pass")
+		t.Log("OK: We can whitelist FILTER values (.)")
 	} else {
-		t.Error("NOT OK: lines with missing (.) values under FILTER pass")
+		t.Error("NOT OK: We can whitelist FILTER values (.)")
 	}
 
-	expect = false
-	actual = altIsValid(".")
+	record = []string{"20", "4", ".", "GCG", "G,GCGCG", ".", "blah", "DP=100"}
 
-	if expect != actual {
-		t.Error("NOT OK: Can't handle missing Alt alleles")
+	actual = linePasses(record, header, nil, nil)
+
+	if actual == expect {
+		t.Log("OK: We allow non-PASS/. FILTER values, when we don't specify allowedFilters")
 	} else {
-		t.Log("OK: Handles missing Alt alleles")
+		t.Error("NOT OK: We allow non-PASS/. FILTER values, when we don't specify allowedFilters")
 	}
 
-	expect = false
-	actual = altIsValid("]13 : 123456]T")
+	record = []string{"20", "4", ".", "GCG", "G,GCGCG", ".", "blah", "DP=100"}
 
-	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	if expect != actual {
-		t.Error("NOT OK: Can't handle single breakends")
+	actual = linePasses(record, header, nil, map[string]bool{"blah": true})
+
+	if actual == false {
+		t.Log("OK: We can exclude/blacklist FILTER values")
 	} else {
-		t.Log("OK: Handles single breakend ']13 : 123456]T'")
-	}
-
-	expect = false
-	actual = altIsValid("C[2 : 321682[")
-
-	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	if expect != actual {
-		t.Error("NOT OK: Can't handle single breakends")
-	} else {
-		t.Log("OK: Handles single breakend 'C[2 : 321682['")
-	}
-
-	expect = false
-	actual = altIsValid(".A")
-
-	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	if expect != actual {
-		t.Error("NOT OK: Can't handle single breakends")
-	} else {
-		t.Log("OK: Handles single breakend '.A'")
-	}
-
-	expect = false
-	actual = altIsValid("G.")
-
-	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	if expect != actual {
-		t.Error("NOT OK: Can't handle single breakends")
-	} else {
-		t.Log("OK: Handles single breakend 'G.'")
-	}
-
-	expect = false
-	actual = altIsValid("<DUP>")
-
-	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	if expect != actual {
-		t.Error("NOT OK: Can't handle complex tags")
-	} else {
-		t.Log("OK: Handles complex Alt tags '<DUP>'")
-	}
-
-	expect = false
-	actual = altIsValid("A,C")
-
-	// https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	if expect != actual {
-		t.Error("NOT OK: Allows multiallelics", actual)
-	} else {
-		t.Log("OK: multiallelics are not supported. altIsValid() requires multiallelics to be split")
+		t.Error("NOT OK: We can exclude/blacklist FILTER values")
 	}
 }
 
@@ -589,9 +566,9 @@ func TestAltIsValid(t *testing.T) {
 	actual := altIsValid("ACTG")
 
 	if expect != actual {
-		t.Error()
+		t.Error("NOT OK: Support ACTG-containing alleles")
 	} else {
-		t.Log("NOT OK: Support ACTG-containing alleles")
+		t.Log("OK: Support ACTG-containing alleles")
 	}
 
 	expect = false
