@@ -117,7 +117,9 @@ Results in 2 output fields, following `missingGenos` or `id` should `--keepId` b
 --allowFilter <String>
 ```
 
-Which `FILTER` values to keep. Comma separated. Defaults to `"PASS,."`
+Which `FILTER` values to keep. Comma separated. Defaults to `"PASS,."`.
+
+If passed "" (empty string) or "\*" (wildcard) will allow *all* FILTER values.
 
 - Similar to [https://samtools.github.io/bcftools/bcftools.html](bcftools) `-f, --apply-filters LIST`
 
