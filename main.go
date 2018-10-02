@@ -171,9 +171,9 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	reader := bufio.NewReader(inFh)
+	reader := bufio.NewReaderSize(inFh, 64*1024*1024)
 
-	writer := bufio.NewWriter(outFh)
+	writer := bufio.NewWriterSize(outFh, 256*1024*1024)
 
 	fmt.Fprintln(writer, stringHeader(config))
 
@@ -218,7 +218,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	var header []string
 
 	// Read buffer
-	workQueue := make(chan string, 100)
+	workQueue := make(chan [][]byte, 1000)
 	complete := make(chan bool)
 
 	endOfLineByte, numChars, versionLine, err := parse.FindEndOfLine(reader, "")
@@ -280,22 +280,41 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		log.Fatal("Couldn't write sample list file")
 	}
 
+	maxCapacity := 5000
 	// Read the lines into the work queue.
 	go func() {
+		// idx := 0
+		buff := make([][]byte, 0, maxCapacity)
 		for {
-			row, err := reader.ReadString(endOfLineByte) // 0x0A separator = newline
+			row, err := reader.ReadBytes(endOfLineByte) // 0x0A separator = newline
 
 			if err == io.EOF {
 				break
 			} else if err != nil {
 				log.Fatal(err)
-			} else if row == "" {
+			} else if len(row) == 0 {
 				// We may have not closed the pipe, but not have any more information to send
 				// Wait for EOF
 				continue
 			}
 
-			workQueue <- row[:len(row)-numChars]
+			if len(buff) >= maxCapacity {
+				workQueue <- buff
+
+				buff = buff[:0]
+				// log.Println(len(buff))
+
+				// idx = 0
+			}
+
+			buff = append(buff, row)
+
+			// idx++
+		}
+
+		if len(buff) > 0 {
+			workQueue <- buff
+			buff = nil
 		}
 
 		// Close the channel so everyone reading from it knows we're done.
@@ -304,7 +323,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 
 	// Now read them all off, concurrently.
 	for i := 0; i < concurrency; i++ {
-		go processLines(header, config, workQueue, writer, complete)
+		go processLines(header, numChars, config, workQueue, writer, complete)
 	}
 
 	// Wait for everyone to finish.
@@ -375,7 +394,7 @@ func altIsValid(alt string) bool {
 	return true
 }
 
-func processLines(header []string, config *Config, queue chan string, writer *bufio.Writer, complete chan bool) {
+func processLines(header []string, numChars int, config *Config, queue chan [][]byte, writer *bufio.Writer, complete chan bool) {
 	var alleles []string
 	var multiallelic bool
 
@@ -411,178 +430,181 @@ func processLines(header []string, config *Config, queue chan string, writer *bu
 	var record []string
 
 	oIdx := -1
-	for line := range queue {
-		if oIdx >= 10000 {
-			fileMutex.Lock()
 
-			writer.Write(output.Bytes())
+	for lines := range queue {
+		for _, row := range lines {
+			if oIdx >= 10000 {
+				fileMutex.Lock()
 
-			fileMutex.Unlock()
+				writer.Write(output.Bytes())
 
-			output.Reset()
+				fileMutex.Unlock()
 
-			oIdx = 0
-		}
+				output.Reset()
 
-		record = strings.Split(line, "\t")
+				oIdx = 0
+			}
 
-		if !linePasses(record, header, allowedFilters, excludedFilters) {
-			continue
-		}
+			record = strings.Split(string(row[:len(row)-numChars]), "\t")
 
-		siteType, positions, refs, alts, altIndices := getAlleles(record[chromIdx], record[posIdx], record[refIdx], record[altIdx])
+			if !linePasses(record, header, allowedFilters, excludedFilters) {
+				continue
+			}
 
-		if len(altIndices) == 0 {
-			continue
-		}
+			siteType, positions, refs, alts, altIndices := getAlleles(record[chromIdx], record[posIdx], record[refIdx], record[altIdx])
 
-		multiallelic = siteType == parse.Multi
+			if len(altIndices) == 0 {
+				continue
+			}
 
-		// if last index > 9 then we can't accept the site, since won't be able
-		// to identify het/hom status
-		if altIndices[len(altIndices)-1] > 9 {
-			log.Printf("%s %s:%s: We currently don't support sites with > 9 minor alleles, found %d", record[chromIdx], record[posIdx], errorLvl, len(alleles))
-			continue
-		}
+			multiallelic = siteType == parse.Multi
 
-		for i := range alts {
-			// If no samples are provided, annotate what we can, skipping hets and homs
-			// If samples are provided, but only missing genotypes, skip the site altogether
-			if numSamples > 0 {
-				homs, hets, missing, ac, an = makeHetHomozygotes(record, header, iLookup[altIndices[i]])
+			// if last index > 9 then we can't accept the site, since won't be able
+			// to identify het/hom status
+			if altIndices[len(altIndices)-1] > 9 {
+				log.Printf("%s %s:%s: We currently don't support sites with > 9 minor alleles, found %d", record[chromIdx], record[posIdx], errorLvl, len(alleles))
+				continue
+			}
 
-				if len(homs) == 0 && len(hets) == 0 {
-					continue
+			for i := range alts {
+				// If no samples are provided, annotate what we can, skipping hets and homs
+				// If samples are provided, but only missing genotypes, skip the site altogether
+				if numSamples > 0 {
+					homs, hets, missing, ac, an = makeHetHomozygotes(record, header, iLookup[altIndices[i]])
+
+					if len(homs) == 0 && len(hets) == 0 {
+						continue
+					}
+
+					// homozygosity and heterozygosity should be relative to complete genotypes
+					effectiveSamples = numSamples - float64(len(missing))
 				}
 
-				// homozygosity and heterozygosity should be relative to complete genotypes
-				effectiveSamples = numSamples - float64(len(missing))
-			}
+				// output is [chr, pos, type, ref, alt, trTv, het, heterozygosity, hom, homozygosity, missing, missingness, sampleMaf]
+				// if keepID append id
+				// if keepInfo append [alleleIndex, info]
 
-			// output is [chr, pos, type, ref, alt, trTv, het, heterozygosity, hom, homozygosity, missing, missingness, sampleMaf]
-			// if keepID append id
-			// if keepInfo append [alleleIndex, info]
+				if len(record[chromIdx]) < 4 || record[chromIdx][0] != chrByte {
+					output.WriteString("chr")
+				}
 
-			if len(record[chromIdx]) < 4 || record[chromIdx][0] != chrByte {
-				output.WriteString("chr")
-			}
-
-			output.WriteString(record[chromIdx])
-			output.WriteByte(tabByte)
-
-			output.WriteString(positions[i])
-			output.WriteByte(tabByte)
-
-			output.WriteString(siteType)
-			output.WriteByte(tabByte)
-
-			output.WriteByte(refs[i])
-			output.WriteByte(tabByte)
-
-			output.WriteString(alts[i])
-			output.WriteByte(tabByte)
-
-			if multiallelic {
-				output.WriteString(parse.NotTrTv)
-			} else {
-				output.WriteString(parse.GetTrTv(string(refs[i]), alts[i]))
-			}
-
-			output.WriteByte(tabByte)
-
-			// Write missing samples
-			// heterozygotes \t heterozygosity
-			if len(hets) == 0 {
-				output.WriteString(emptyField)
-				output.WriteByte(tabByte)
-				output.WriteByte(zeroByte)
-			} else {
-				output.WriteString(strings.Join(hets, fieldDelim))
+				output.WriteString(record[chromIdx])
 				output.WriteByte(tabByte)
 
-				// This gives plenty precision; we are mostly interested in
-				// the first or maybe 2-3 significant digits
-				// https://play.golang.org/p/Ux-QmClaJG
-				// Also, gnomAD seems to use 6 bits of precision
-				// the bitSize == 64 allows us to round properly past 6 s.f
-				// Note: 'G' requires these numbers to be < 0 for proper precision
-				// (elase only 6 s.f total, rather than after decimal)
-				output.WriteString(strconv.FormatFloat(float64(len(hets))/effectiveSamples, 'G', precision, 64))
+				output.WriteString(positions[i])
+				output.WriteByte(tabByte)
+
+				output.WriteString(siteType)
+				output.WriteByte(tabByte)
+
+				output.WriteByte(refs[i])
+				output.WriteByte(tabByte)
+
+				output.WriteString(alts[i])
+				output.WriteByte(tabByte)
+
+				if multiallelic {
+					output.WriteString(parse.NotTrTv)
+				} else {
+					output.WriteString(parse.GetTrTv(string(refs[i]), alts[i]))
+				}
+
+				output.WriteByte(tabByte)
+
+				// Write missing samples
+				// heterozygotes \t heterozygosity
+				if len(hets) == 0 {
+					output.WriteString(emptyField)
+					output.WriteByte(tabByte)
+					output.WriteByte(zeroByte)
+				} else {
+					output.WriteString(strings.Join(hets, fieldDelim))
+					output.WriteByte(tabByte)
+
+					// This gives plenty precision; we are mostly interested in
+					// the first or maybe 2-3 significant digits
+					// https://play.golang.org/p/Ux-QmClaJG
+					// Also, gnomAD seems to use 6 bits of precision
+					// the bitSize == 64 allows us to round properly past 6 s.f
+					// Note: 'G' requires these numbers to be < 0 for proper precision
+					// (elase only 6 s.f total, rather than after decimal)
+					output.WriteString(strconv.FormatFloat(float64(len(hets))/effectiveSamples, 'G', precision, 64))
+				}
+
+				output.WriteByte(tabByte)
+
+				// Write missing samples
+				// homozygotes \t homozygosity
+				if len(homs) == 0 {
+					output.WriteString(emptyField)
+					output.WriteByte(tabByte)
+					output.WriteByte(zeroByte)
+				} else {
+					output.WriteString(strings.Join(homs, fieldDelim))
+					output.WriteByte(tabByte)
+					output.WriteString(strconv.FormatFloat(float64(len(homs))/effectiveSamples, 'G', precision, 64))
+				}
+
+				output.WriteByte(tabByte)
+
+				// Write missing samples
+				// missingGenos \t missingness
+				if len(missing) == 0 {
+					output.WriteString(emptyField)
+					output.WriteByte(tabByte)
+					output.WriteByte(zeroByte)
+				} else {
+					output.WriteString(strings.Join(missing, fieldDelim))
+					output.WriteByte(tabByte)
+					output.WriteString(strconv.FormatFloat(float64(len(missing))/numSamples, 'G', precision, 64))
+				}
+
+				// Write the sample minor allele frequency
+				// This can be 0 in one of wo situations
+				// First, if we have only missing genotypes at this site
+				// However, in this case, we don't reach this code, because of line
+				// 302 (if len(homs) == 0 && len(hets) == 0)
+				// Else if there are truly no minor allele
+				output.WriteByte(tabByte)
+
+				output.WriteString(strconv.Itoa(ac))
+				output.WriteByte(tabByte)
+				output.WriteString(strconv.Itoa(an))
+				output.WriteByte(tabByte)
+
+				if ac == 0 {
+					output.WriteByte(zeroByte)
+				} else {
+					output.WriteString(strconv.FormatFloat(float64(ac)/float64(an), 'G', precision, 64))
+				}
+
+				/******************* Optional Fields ***********************/
+				if keepPos == true {
+					// Write the input VCF position; we normalize this above
+					// and here you can validate that transformation
+					output.WriteByte(tabByte)
+					output.WriteString(record[posIdx])
+				}
+
+				if keepID == true {
+					output.WriteByte(tabByte)
+					output.WriteString(record[idIdx])
+				}
+
+				if keepInfo == true {
+					// Write the index of the allele, to allow users to segregate data in the INFO field
+					output.WriteByte(tabByte)
+					output.WriteString(strconv.Itoa(altIndices[i]))
+
+					// Write info for all indices
+					output.WriteByte(tabByte)
+					output.WriteString(record[infoIdx])
+				}
+
+				output.WriteByte(clByte)
+
+				oIdx++
 			}
-
-			output.WriteByte(tabByte)
-
-			// Write missing samples
-			// homozygotes \t homozygosity
-			if len(homs) == 0 {
-				output.WriteString(emptyField)
-				output.WriteByte(tabByte)
-				output.WriteByte(zeroByte)
-			} else {
-				output.WriteString(strings.Join(homs, fieldDelim))
-				output.WriteByte(tabByte)
-				output.WriteString(strconv.FormatFloat(float64(len(homs))/effectiveSamples, 'G', precision, 64))
-			}
-
-			output.WriteByte(tabByte)
-
-			// Write missing samples
-			// missingGenos \t missingness
-			if len(missing) == 0 {
-				output.WriteString(emptyField)
-				output.WriteByte(tabByte)
-				output.WriteByte(zeroByte)
-			} else {
-				output.WriteString(strings.Join(missing, fieldDelim))
-				output.WriteByte(tabByte)
-				output.WriteString(strconv.FormatFloat(float64(len(missing))/numSamples, 'G', precision, 64))
-			}
-
-			// Write the sample minor allele frequency
-			// This can be 0 in one of wo situations
-			// First, if we have only missing genotypes at this site
-			// However, in this case, we don't reach this code, because of line
-			// 302 (if len(homs) == 0 && len(hets) == 0)
-			// Else if there are truly no minor allele
-			output.WriteByte(tabByte)
-
-			output.WriteString(strconv.Itoa(ac))
-			output.WriteByte(tabByte)
-			output.WriteString(strconv.Itoa(an))
-			output.WriteByte(tabByte)
-
-			if ac == 0 {
-				output.WriteByte(zeroByte)
-			} else {
-				output.WriteString(strconv.FormatFloat(float64(ac)/float64(an), 'G', precision, 64))
-			}
-
-			/******************* Optional Fields ***********************/
-			if keepPos == true {
-				// Write the input VCF position; we normalize this above
-				// and here you can validate that transformation
-				output.WriteByte(tabByte)
-				output.WriteString(record[posIdx])
-			}
-
-			if keepID == true {
-				output.WriteByte(tabByte)
-				output.WriteString(record[idIdx])
-			}
-
-			if keepInfo == true {
-				// Write the index of the allele, to allow users to segregate data in the INFO field
-				output.WriteByte(tabByte)
-				output.WriteString(strconv.Itoa(altIndices[i]))
-
-				// Write info for all indices
-				output.WriteByte(tabByte)
-				output.WriteString(record[infoIdx])
-			}
-
-			output.WriteByte(clByte)
-
-			oIdx++
 		}
 	}
 
