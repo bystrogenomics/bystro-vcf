@@ -218,7 +218,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	var header []string
 
 	// Read buffer
-	workQueue := make(chan [][]byte, 1000)
+	workQueue := make(chan [][]byte, 64)
 	complete := make(chan bool)
 
 	endOfLineByte, numChars, versionLine, err := parse.FindEndOfLine(reader, "")
