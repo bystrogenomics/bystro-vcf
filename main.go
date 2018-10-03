@@ -171,9 +171,9 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	reader := bufio.NewReaderSize(inFh, 64*1024*1024)
+	reader := bufio.NewReaderSize(inFh, 48*1024*1024)
 
-	writer := bufio.NewWriterSize(outFh, 256*1024*1024)
+	writer := bufio.NewWriterSize(outFh, 48*1024*1024)
 
 	fmt.Fprintln(writer, stringHeader(config))
 
@@ -280,7 +280,12 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		log.Fatal("Couldn't write sample list file")
 	}
 
-	maxCapacity := 5000
+	// Now read them all off, concurrently.
+	for i := 0; i < concurrency; i++ {
+		go processLines(header, numChars, config, workQueue, writer, complete)
+	}
+
+	maxCapacity := 128
 	// Read the lines into the work queue.
 	go func() {
 		// idx := 0
@@ -301,15 +306,13 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 			if len(buff) >= maxCapacity {
 				workQueue <- buff
 
-				buff = buff[:0]
-				// log.Println(len(buff))
-
-				// idx = 0
+				// if we re-assign it it will data race
+				// i.e don't do buff = buff[:0]
+				// buff = nil also works, but will set capacity to 0
+				buff = nil
 			}
 
 			buff = append(buff, row)
-
-			// idx++
 		}
 
 		if len(buff) > 0 {
@@ -320,11 +323,6 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		// Close the channel so everyone reading from it knows we're done.
 		close(workQueue)
 	}()
-
-	// Now read them all off, concurrently.
-	for i := 0; i < concurrency; i++ {
-		go processLines(header, numChars, config, workQueue, writer, complete)
-	}
 
 	// Wait for everyone to finish.
 	for i := 0; i < concurrency; i++ {
@@ -395,7 +393,6 @@ func altIsValid(alt string) bool {
 }
 
 func processLines(header []string, numChars int, config *Config, queue chan [][]byte, writer *bufio.Writer, complete chan bool) {
-	var alleles []string
 	var multiallelic bool
 
 	// Declare sample-related variables outside loop, in case this helps us
@@ -432,19 +429,19 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	oIdx := -1
 
 	for lines := range queue {
+		if oIdx >= 1000 {
+			fileMutex.Lock()
+
+			writer.Write(output.Bytes())
+
+			fileMutex.Unlock()
+
+			output.Reset()
+
+			oIdx = 0
+		}
+
 		for _, row := range lines {
-			if oIdx >= 10000 {
-				fileMutex.Lock()
-
-				writer.Write(output.Bytes())
-
-				fileMutex.Unlock()
-
-				output.Reset()
-
-				oIdx = 0
-			}
-
 			record = strings.Split(string(row[:len(row)-numChars]), "\t")
 
 			if !linePasses(record, header, allowedFilters, excludedFilters) {
@@ -462,7 +459,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 			// if last index > 9 then we can't accept the site, since won't be able
 			// to identify het/hom status
 			if altIndices[len(altIndices)-1] > 9 {
-				log.Printf("%s %s:%s: We currently don't support sites with > 9 minor alleles, found %d", record[chromIdx], record[posIdx], errorLvl, len(alleles))
+				log.Printf("%s %s:%s: We currently don't support sites with > 9 minor alleles, found %d", record[chromIdx], record[posIdx], errorLvl, len(altIndices))
 				continue
 			}
 
