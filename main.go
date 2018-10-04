@@ -218,7 +218,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	var header []string
 
 	// Read buffer
-	workQueue := make(chan [][]byte, 32)
+	workQueue := make(chan [][]byte, 8)
 	complete := make(chan bool)
 
 	endOfLineByte, numChars, versionLine, err := parse.FindEndOfLine(reader, "")
@@ -429,7 +429,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	oIdx := -1
 
 	for lines := range queue {
-		if oIdx >= 1000 {
+		if oIdx >= 2500 {
 			fileMutex.Lock()
 
 			writer.Write(output.Bytes())
