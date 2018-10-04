@@ -218,7 +218,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	var header []string
 
 	// Read buffer
-	workQueue := make(chan [][]byte, 8)
+	workQueue := make(chan [][]byte, 16)
 	complete := make(chan bool)
 
 	endOfLineByte, numChars, versionLine, err := parse.FindEndOfLine(reader, "")
@@ -285,7 +285,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		go processLines(header, numChars, config, workQueue, writer, complete)
 	}
 
-	maxCapacity := 128
+	maxCapacity := 64
 	// Read the lines into the work queue.
 	go func() {
 		// idx := 0
@@ -309,7 +309,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 				// if we re-assign it it will data race
 				// i.e don't do buff = buff[:0]
 				// buff = nil also works, but will set capacity to 0
-				buff = nil
+				buff = make([][]byte, 0, maxCapacity)
 			}
 
 			buff = append(buff, row)
