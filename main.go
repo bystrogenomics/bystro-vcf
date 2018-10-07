@@ -287,42 +287,40 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 
 	maxCapacity := 64
 	// Read the lines into the work queue.
-	go func() {
-		// idx := 0
-		buff := make([][]byte, 0, maxCapacity)
-		for {
-			row, err := reader.ReadBytes(endOfLineByte) // 0x0A separator = newline
+	// idx := 0
+	buff := make([][]byte, 0, maxCapacity)
+	for {
+		row, err := reader.ReadBytes(endOfLineByte) // 0x0A separator = newline
 
-			if err == io.EOF {
-				break
-			} else if err != nil {
-				log.Fatal(err)
-			} else if len(row) == 0 {
-				// We may have not closed the pipe, but not have any more information to send
-				// Wait for EOF
-				continue
-			}
-
-			if len(buff) >= maxCapacity {
-				workQueue <- buff
-
-				// if we re-assign it it will data race
-				// i.e don't do buff = buff[:0]
-				// buff = nil also works, but will set capacity to 0
-				buff = make([][]byte, 0, maxCapacity)
-			}
-
-			buff = append(buff, row)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatal(err)
+		} else if len(row) == 0 {
+			// We may have not closed the pipe, but not have any more information to send
+			// Wait for EOF
+			continue
 		}
 
-		if len(buff) > 0 {
+		if len(buff) >= maxCapacity {
 			workQueue <- buff
-			buff = nil
+
+			// if we re-assign it it will data race
+			// i.e don't do buff = buff[:0]
+			// buff = nil also works, but will set capacity to 0
+			buff = make([][]byte, 0, maxCapacity)
 		}
 
-		// Close the channel so everyone reading from it knows we're done.
-		close(workQueue)
-	}()
+		buff = append(buff, row)
+	}
+
+	if len(buff) > 0 {
+		workQueue <- buff
+		buff = nil
+	}
+
+	// Close the channel so everyone reading from it knows we're done.
+	close(workQueue)
 
 	// Wait for everyone to finish.
 	for i := 0; i < concurrency; i++ {
@@ -426,10 +424,8 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	var output bytes.Buffer
 	var record []string
 
-	oIdx := -1
-
 	for lines := range queue {
-		if oIdx >= 2500 {
+		if output.Len() >= 2e6 {
 			fileMutex.Lock()
 
 			writer.Write(output.Bytes())
@@ -437,8 +433,6 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 			fileMutex.Unlock()
 
 			output.Reset()
-
-			oIdx = 0
 		}
 
 		for _, row := range lines {
@@ -600,7 +594,6 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 
 				output.WriteByte(clByte)
 
-				oIdx++
 			}
 		}
 	}
