@@ -182,8 +182,18 @@ func main() {
 	// }
 
 	readVcf(config, reader, writer)
-	writer.Flush()
-	outFh.Close()
+
+	err := writer.Flush()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = outFh.Close()
+
+	if err != nil {
+		log.Print(err)
+	}
 }
 
 func stringHeader(config *Config) string {
@@ -339,26 +349,43 @@ func writeSampleListIfWanted(config *Config, header []string) error {
 		return err
 	}
 
-	// make sure it gets closed
-	defer outFh.Close()
-	writer := bufio.NewWriter(outFh)
+	// writer := io.NewWriter(outFh)
+	sList := makeSampleList(header)
 
-	writeSampleList(writer, header)
+	_, err = outFh.WriteString(sList.String())
+
+	if err != nil {
+		return err
+	}
+
+	err = outFh.Sync()
+
+	if err != nil {
+		return err
+	}
+
+	err = outFh.Close()
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func writeSampleList(writer *bufio.Writer, header []string) {
+func makeSampleList(header []string) bytes.Buffer {
+	var buf bytes.Buffer
+
 	if len(header) < 10 {
-		return
+		return buf
 	}
 
 	for i := 9; i < len(header); i++ {
-		writer.WriteString(header[i])
-		writer.WriteByte(clByte)
+		buf.WriteString(header[i])
+		buf.WriteByte(clByte)
 	}
 
-	writer.Flush()
+	return buf
 }
 
 func linePasses(record []string, header []string, allowedFilters map[string]bool,
@@ -669,7 +696,9 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 	var positions []string
 	var indexes []int
 	var multi bool
-	for altIdx, tAlt := range strings.Split(alt, ",") {
+
+	tAlts := strings.Split(alt, ",")
+	for altIdx := range tAlts {
 		// It can be a MULTIALLELIC and have errors that
 		// reduce output allele count to 1, so record here
 		if !multi && altIdx > 0 {
@@ -677,23 +706,23 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 		}
 
 		// if a site doesn't have a valid form, like ACTG, skip it
-		if altIsValid(tAlt) == false {
+		if altIsValid(tAlts[altIdx]) == false {
 			log.Printf("%s:%s ALT #%d %s\n", chrom, pos, altIdx+1, badAltError)
 			continue
 		}
 
 		if len(ref) == 1 {
-			if len(tAlt) == 1 {
-				//tAlt isn't modified
+			if len(tAlts[altIdx]) == 1 {
+				//tAlts[altIdx] isn't modified
 				positions = append(positions, pos)
 				references = append(references, ref[0])
-				alleles = append(alleles, tAlt)
+				alleles = append(alleles, tAlts[altIdx])
 				indexes = append(indexes, altIdx)
 				continue
 			}
 
-			// Simple insertion : tAlt > 1 base, and ref == 1 base
-			if tAlt[0] != ref[0] {
+			// Simple insertion : tAlts[altIdx] > 1 base, and ref == 1 base
+			if tAlts[altIdx][0] != ref[0] {
 				log.Printf("%s:%s ALT #%d %s", chrom, pos, altIdx+1, insError1)
 				continue
 			}
@@ -701,7 +730,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 			// we take the allele from the 2nd base, since insertion occurs after the reference
 			var buffer bytes.Buffer
 			buffer.WriteString("+")
-			buffer.WriteString(tAlt[1:])
+			buffer.WriteString(tAlts[altIdx][1:])
 
 			// simple insertion; our annotations also use 1 base padding for insertions, so keep pos same
 			positions = append(positions, pos)
@@ -728,9 +757,9 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 			}
 		}
 
-		if len(tAlt) == 1 {
+		if len(tAlts[altIdx]) == 1 {
 			// Simple deletion, padding of 1 base, padding must match
-			if tAlt[0] != ref[0] {
+			if tAlts[altIdx][0] != ref[0] {
 				log.Printf("%s:%s ALT#%d %s", chrom, pos, altIdx+1, delError1)
 				continue
 			}
@@ -751,15 +780,15 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 		// could be a completely normal multiallelic (due to padding, shifted)
 
 		//1st check for MNPs and extra-padding SNPs
-		if len(ref) == len(tAlt) {
+		if len(ref) == len(tAlts[altIdx]) {
 			// Let's check each base; if there is more than 1 change, this is an MNP
 			// whether a sparse MNP or not.
 			// We'll report each modified base
 			for i := 0; i < len(ref); i++ {
-				if ref[i] != tAlt[i] {
+				if ref[i] != tAlts[altIdx][i] {
 					positions = append(positions, strconv.Itoa(intPos+i))
 					references = append(references, ref[i])
-					alleles = append(alleles, string(tAlt[i]))
+					alleles = append(alleles, string(tAlts[altIdx][i]))
 
 					// Here we append the index of the VCF ALT, not the MNP idx
 					// all bases in an MNP will have the same index
@@ -789,16 +818,16 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 		// 1) For insertions, figure out the shared right edge, from 1 base downstream of first ref base
 		// Then, check if the remaining ref bases match the left edge of the alt
 		// If they don't, skip that site
-		// 2) For deletions, the same, except replace the role of ref with the tAlt
+		// 2) For deletions, the same, except replace the role of ref with the tAlts[altIdx]
 
 		// Our method should be substantially faster, since we don't need to calculate
-		// the min(len(ref), len(tAlt))
+		// the min(len(ref), len(tAlts[altIdx]))
 		// and because we don't create a new slice for every shared ref/alt at right edges and left
 
-		if len(tAlt) > len(ref) {
+		if len(tAlts[altIdx]) > len(ref) {
 			rIdx := 0
 			// we won't allow the entire ref to match as a suffix, only up to 1 base downstream from beginning of ref
-			for len(tAlt)+rIdx > 0 && len(ref)+rIdx > 1 && tAlt[len(tAlt)+rIdx-1] == ref[len(ref)+rIdx-1] {
+			for len(tAlts[altIdx])+rIdx > 0 && len(ref)+rIdx > 1 && tAlts[altIdx][len(tAlts[altIdx])+rIdx-1] == ref[len(ref)+rIdx-1] {
 				rIdx--
 			}
 
@@ -829,7 +858,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 			// and we want to keep the last reference base
 			// The ref is ref[2 - 1] or ref[1]
 			offset := len(ref) + rIdx
-			if ref[:offset] != tAlt[:offset] {
+			if ref[:offset] != tAlts[altIdx][:offset] {
 				log.Printf("%s:%s ALT#%d %s", chrom, pos, altIdx+1, mixedError)
 				continue
 			}
@@ -843,12 +872,12 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 			positions = append(positions, strconv.Itoa(intPos+offset-1))
 			references = append(references, ref[offset-1])
 
-			// Similarly, the alt allele starts from len(ref) + rIdx, and ends at len(tAlt) + rIdx
+			// Similarly, the alt allele starts from len(ref) + rIdx, and ends at len(tAlts[altIdx]) + rIdx
 			// from ex: TAGCTT ref: TAT :
-			// rIdx == -1 , real alt == tAlt[len(ref) - 1:len(tAlt) - 1] == tALt[2:5]
+			// rIdx == -1 , real alt == tAlts[altIdx][len(ref) - 1:len(tAlts[altIdx]) - 1] == tAlts[altIdx][2:5]
 			var insBuffer bytes.Buffer
 			insBuffer.WriteString("+")
-			insBuffer.WriteString(tAlt[offset : len(tAlt)+rIdx])
+			insBuffer.WriteString(tAlts[altIdx][offset : len(tAlts[altIdx])+rIdx])
 
 			alleles = append(alleles, insBuffer.String())
 			indexes = append(indexes, altIdx)
@@ -866,22 +895,22 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 		// where (100, 101) are the two padding bases
 		// ref is the first deleted base or ref[lIdx] == ref[2]
 
-		// Just like insertion, but try to match all bases from 1 base downstream of tAlt to ref
+		// Just like insertion, but try to match all bases from 1 base downstream of tAlts[altIdx] to ref
 		rIdx := 0
 		// we won't allow the enitre ALT to match as a suffix
 		// this is the inverse of the insertion case
 		// can have an intercolated deletion, where some bases in middle of deletion are missing w.r.t ref
 		// or deletions where teh entire left edge of the alt match the ref
-		for len(tAlt)+rIdx > 1 && len(ref)+rIdx > 0 && tAlt[len(tAlt)+rIdx-1] == ref[len(ref)+rIdx-1] {
+		for len(tAlts[altIdx])+rIdx > 1 && len(ref)+rIdx > 0 && tAlts[altIdx][len(tAlts[altIdx])+rIdx-1] == ref[len(ref)+rIdx-1] {
 			rIdx--
 		}
 
 		//ex: if post: 100 alt: AATCG and ref: AAAAATCG, we expect deletion to
-		//occurs on base 101, alt: -AAAA == -4 == -(len(ref) - 3 - (len(tAlt) - 3)) == -8 - 3 - 2 = -3
+		//occurs on base 101, alt: -AAAA == -4 == -(len(ref) - 3 - (len(tAlts[altIdx]) - 3)) == -8 - 3 - 2 = -3
 		//rIdx is 3 since matches 3 bases
-		//position gets shifted by len(tAlt) + rIdx, since we don't want any padding in our output
-		offset := len(tAlt) + rIdx
-		if ref[:offset] != tAlt[:offset] {
+		//position gets shifted by len(tAlts[altIdx]) + rIdx, since we don't want any padding in our output
+		offset := len(tAlts[altIdx]) + rIdx
+		if ref[:offset] != tAlts[altIdx][:offset] {
 			log.Printf("%s:%s ALT#%d %s", chrom, pos, altIdx+1, mixedError)
 			continue
 		}
@@ -890,7 +919,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 		// we want the base after the last shared
 		references = append(references, ref[offset])
 
-		// the allele if -(len(ref) + rIdx - (len(tAlt) + rIdx))
+		// the allele if -(len(ref) + rIdx - (len(tAlts[altIdx]) + rIdx))
 		alleles = append(alleles, strconv.Itoa(-(len(ref) + rIdx - offset)))
 		indexes = append(indexes, altIdx)
 
