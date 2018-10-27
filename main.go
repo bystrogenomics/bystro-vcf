@@ -182,8 +182,18 @@ func main() {
 	// }
 
 	readVcf(config, reader, writer)
-	writer.Flush()
-	outFh.Close()
+
+	err := writer.Flush()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = outFh.Close()
+
+	if err != nil {
+		log.Print(err)
+	}
 }
 
 func stringHeader(config *Config) string {
@@ -339,26 +349,43 @@ func writeSampleListIfWanted(config *Config, header []string) error {
 		return err
 	}
 
-	// make sure it gets closed
-	defer outFh.Close()
-	writer := bufio.NewWriter(outFh)
+	// writer := io.NewWriter(outFh)
+	sList := makeSampleList(header)
 
-	writeSampleList(writer, header)
+	_, err = outFh.WriteString(sList.String())
+
+	if err != nil {
+		return err
+	}
+
+	err = outFh.Sync()
+
+	if err != nil {
+		return err
+	}
+
+	err = outFh.Close()
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func writeSampleList(writer *bufio.Writer, header []string) {
+func makeSampleList(header []string) bytes.Buffer {
+	var buf bytes.Buffer
+
 	if len(header) < 10 {
-		return
+		return buf
 	}
 
 	for i := 9; i < len(header); i++ {
-		writer.WriteString(header[i])
-		writer.WriteByte(clByte)
+		buf.WriteString(header[i])
+		buf.WriteByte(clByte)
 	}
 
-	writer.Flush()
+	return buf
 }
 
 func linePasses(record []string, header []string, allowedFilters map[string]bool,
