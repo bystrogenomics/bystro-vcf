@@ -138,7 +138,6 @@ func main() {
 		inFh = os.Stdin
 	}
 
-	// make sure it gets closed
 	defer inFh.Close()
 	if config.errPath != "" {
 		var err error
@@ -159,7 +158,7 @@ func main() {
 	} else {
 		outFh = os.Stdout
 	}
-	// make sure it gets closed
+
 	defer outFh.Close()
 
 	if config.cpuProfile != "" {
@@ -176,10 +175,6 @@ func main() {
 	writer := bufio.NewWriterSize(outFh, 48*1024*1024)
 
 	fmt.Fprintln(writer, stringHeader(config))
-
-	// if config.famPath != "" {
-	//   fillSampleIdx(config.famPath)
-	// }
 
 	readVcf(config, reader, writer)
 
@@ -218,10 +213,6 @@ func header(config *Config) []string {
 	return header
 }
 
-// func fillSampleIdx (config *Config) {
-
-// }
-
 func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	foundHeader := false
 
@@ -247,12 +238,9 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		log.Fatal("Not a VCF file")
 	}
 
-	// Get the header
 	for {
 		// http://stackoverflow.com/questions/8757389/reading-file-line-by-line-in-go
 		// http://www.jeffduckett.com/blog/551119d6c6b86364cef12da7/golang---read-a-file-line-by-line.html
-		// Scanner doesn't work well, has buffer restrictions that we need to manually get around
-		// and we don't expect any newline characters in a Seqant output body
 		row, err := reader.ReadString(endOfLineByte) // 0x0A separator = newline
 
 		if err == io.EOF {
@@ -264,8 +252,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 			continue
 		}
 
-		// remove the trailing \n or \r
-		// equivalent of chomp https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
+		// Chomp equivalent: https://groups.google.com/forum/#!topic/golang-nuts/smFU8TytFr4
 		record := strings.Split(row[:len(row)-numChars], "\t")
 
 		if foundHeader == false {
@@ -281,7 +268,6 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		log.Fatal("No header found")
 	}
 
-	// Remove periods from sample names
 	parse.NormalizeHeader(header)
 
 	err = writeSampleListIfWanted(config, header)
@@ -290,14 +276,14 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		log.Fatal("Couldn't write sample list file")
 	}
 
-	// Now read them all off, concurrently.
+	// Spawn threads
 	for i := 0; i < concurrency; i++ {
 		go processLines(header, numChars, config, workQueue, writer, complete)
 	}
 
 	maxCapacity := 64
-	// Read the lines into the work queue.
-	// idx := 0
+
+	// Fill the work queue.
 	buff := make([][]byte, 0, maxCapacity)
 	for {
 		row, err := reader.ReadBytes(endOfLineByte) // 0x0A separator = newline
@@ -308,7 +294,6 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 			log.Fatal(err)
 		} else if len(row) == 0 {
 			// We may have not closed the pipe, but not have any more information to send
-			// Wait for EOF
 			continue
 		}
 
@@ -329,7 +314,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		buff = nil
 	}
 
-	// Close the channel so everyone reading from it knows we're done.
+	// Indicate to all processing threads that no more work remains
 	close(workQueue)
 
 	// Wait for everyone to finish.
@@ -349,7 +334,6 @@ func writeSampleListIfWanted(config *Config, header []string) error {
 		return err
 	}
 
-	// writer := io.NewWriter(outFh)
 	sList := makeSampleList(header)
 
 	_, err = outFh.WriteString(sList.String())
@@ -578,18 +562,14 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 				}
 
 				// Write the sample minor allele frequency
-				// This can be 0 in one of wo situations
-				// First, if we have only missing genotypes at this site
-				// However, in this case, we don't reach this code, because of line
-				// 302 (if len(homs) == 0 && len(hets) == 0)
-				// Else if there are truly no minor allele
 				output.WriteByte(tabByte)
 
 				output.WriteString(strconv.Itoa(ac))
 				output.WriteByte(tabByte)
 				output.WriteString(strconv.Itoa(an))
 				output.WriteByte(tabByte)
-
+				
+				// TODO: can ac == 0 && (len(het) > 0 || len(hom) > 0) occur?
 				if ac == 0 {
 					output.WriteByte(zeroByte)
 				} else {
@@ -598,8 +578,6 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 
 				/******************* Optional Fields ***********************/
 				if keepPos == true {
-					// Write the input VCF position; we normalize this above
-					// and here you can validate that transformation
 					output.WriteByte(tabByte)
 					output.WriteString(record[posIdx])
 				}
@@ -633,18 +611,17 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 		fileMutex.Unlock()
 	}
 
-	// log.Println("Worker hit, missed this many times: ", hitCount, missCount)
-	// Let the main process know we're done.
+
 	complete <- true
 }
 
-// @returns type, pos []string, ref []byte, alt []string, altIndices []int
-// ref is always 1 base
-// could return error object, but logging works as well, and seems cheaper
 func getAlleles(chrom string, pos string, ref string, alt string) (string, []string, []byte, []string, []int) {
-	// First check the simple cases, for performance reasons
+	// Indel format:
+	// Deletion: -N : "-" followed by # of deleted bases (inclusive of ref)
+	// Insertion: \+[ATCG]+ : "+" followed by the inserted bases, which occur after the ref
+	// ref is always 1 base,  which follows from not requiring deletions to have a ACTG base
+
 	if alt == ref {
-		// No point in returning ref sites
 		log.Printf("%s:%s : %s\n", chrom, pos, sameError)
 		return "", nil, nil, nil, nil
 	}
@@ -675,20 +652,13 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 		}
 
 		// pos is the next base over (first deleted base)
-		// ref is also the first deleted base, since alt is of 1 padding, that's idx 1/ 2nd ref base
+		// ref is also the first deleted base, since alt is of 1 padding, that's idx 1 (2nd ref base)
 		// alt == len(alt) - len(ref) for len(alt) < len(ref)
 		// example: alt = A (len == 1), ref = AAATCC (len == 6)
 		// 1 - 6 = -5 (then conver to string)
 		return parse.Del, []string{strconv.Itoa(intPos + 1)}, []byte{ref[1]}, []string{strconv.Itoa(1 - len(ref))}, []int{0}
 	}
 
-	// len(ref) > 1
-	// this means position errors only generated if complex
-	// consuming script will probaly also need position, and will generate its own
-	// errors
-	// we don't pad our deletions; the first deleted base is -1
-	// and the reference is that first deleted base
-	// don't modify this value, reuse
 	var intPos int
 
 	var alleles []string
@@ -703,7 +673,6 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 			multi = true
 		}
 
-		// if a site doesn't have a valid form, like ACTG, skip it
 		if altIsValid(tAlt) == false {
 			log.Printf("%s:%s ALT #%d %s\n", chrom, pos, altIdx+1, badAltError)
 			continue
@@ -772,7 +741,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 			continue
 		}
 
-		// I we're here, ref and alt are both > 1 base long
+		// If we're here, ref and alt are both > 1 base long
 		// could be a weird SNP (multiple bases are SNPS, len(ref) == len(alt))
 		// could be a weird deletion/insertion
 		// could be a completely normal multiallelic (due to padding, shifted)
