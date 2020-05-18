@@ -462,7 +462,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 
 			// if last index > 9 then we can't accept the site, since won't be able
 			// to identify het/hom status
-			if len(alts) > len(iLookup)  {
+			if altIndices[len(altIndices)-1] >= len(iLookup) {
 				log.Printf("%s %s:%s: We currently don't support sites with > %d minor alleles, found %d", record[chromIdx], record[posIdx], errorLvl, len(iLookup), len(altIndices))
 				continue
 			}
