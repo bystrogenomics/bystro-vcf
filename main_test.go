@@ -2842,3 +2842,28 @@ func TestMNP(t *testing.T) {
 		t.Errorf("NOT OK: %s", test)
 	}
 }
+
+func TestManyAlleles(t *testing.T) {
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"}, "\t")
+
+	// Define a interstital insertion, between C & T
+	record := strings.Join([]string{"10", "1", "rs1", "CTTTTT", "CTTTTTTTT,CTTTTA,CTTTTTTT,CTT,CTTTTTT,C,CTTTT,CT,CTTTTTTTTTTTTTG,CTTTTTTTTTA", "100", "PASS", "AC=1"}, "\t")
+
+	lines := versionLine + "\n" + header + "\n" + record + "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	config := Config{emptyField: "!", fieldDelimiter: ";"}
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	results := bufio.NewScanner(byteBuf)
+
+	readVcf(&config, reader, w)
+	w.Flush()
+
+	if len(results.Text()) > 0 {
+		t.Error("Expect 0 results when > 9 alleles")
+	}
+}
