@@ -32,6 +32,7 @@ const (
 	filterIdx int = 6
 	infoIdx   int = 7
 	formatIdx int = 8
+	sampleIdx int = 9
 )
 
 const (
@@ -364,7 +365,7 @@ func makeSampleList(header []string) bytes.Buffer {
 		return buf
 	}
 
-	for i := 9; i < len(header); i++ {
+	for i := sampleIdx; i < len(header); i++ {
 		buf.WriteString(header[i])
 		buf.WriteByte(clByte)
 	}
@@ -923,8 +924,8 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 	return parse.Snp, positions, references, alleles, indexes
 }
 
-// TODO: decide whether to be more strict about missing genotypes
-// Currently some garbage like .... would be considered "missing"
+// makeHetHomozygotes process all sample genotype fields, and for a single alleleNum, which is the allele index (1 based)
+// returns the homozygotes, heterozygotes, missing samples, total alt counts, genotype counts, and missing counts
 func makeHetHomozygotes(fields []string, header []string, alleleNum string) ([]string, []string, []string, int, int) {
 	var homs []string
 	var hets []string
@@ -936,19 +937,10 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum string) ([]s
 	var totalAltCount int
 	var totalGtCount int
 
-	// Unfortunately there is no guarantee that genotypes will be consistently phased or unphased
-	/*  From https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT NA00001 NA00002 NA00003
-	20 14370 rs6054257 G A 29 PASS NS=3;DP=14;AF=0.5;DB;H2 GT:GQ:DP:HQ 0|0:48:1:51,51 1|0:48:8:51,51 1/1:43:5:.,.
-	20 17330 . T A 3 q10 NS=3;DP=11;AF=0.017 GT:GQ:DP:HQ 0|0:49:3:58,50 0|1:3:5:65,3 0/0:41:3
-	20 1110696 rs6040355 A G,T 67 PASS NS=2;DP=10;AF=0.333,0.667;AA=T;DB GT:GQ:DP:HQ 1|2:21:6:23,27 2|1:2:0:18,2 2/2:35:4
-	20 1230237 . T . 47 PASS NS=3;DP=13;AA=T GT:GQ:DP:HQ 0|0:54:7:56,60 0|0:48:4:51,51 0/0:61:2
-	20 1234567 microsat1 GTC G,GTCT 50 PASS NS=3;DP=9;AA=G GT:GQ:DP 0/1:35:4 0/2:17:2 1/1:40:3
-	*/
 SAMPLES:
 	// NOTE: If any errors encountered, all genotypes in row will be skipped and logged, since
 	// this represents a likely corruption of data
-	for i := 9; i < len(header); i++ {
+	for i := sampleIdx; i < len(header); i++ {
 		field := fields[i]
 
 		if field[0] == '.' {
@@ -989,11 +981,8 @@ SAMPLES:
 			sep = "|"
 		} else if strings.Contains(alleleField, "/") {
 			sep = "/"
-		} else if len(alleleField) == 1 {
-			sep = ""
 		} else {
-			log.Printf("%s:%s : Skipping. Couldn't decode genotype %s", fields[chromIdx], fields[posIdx], field)
-			return nil, nil, nil, 0, 0
+			sep = ""
 		}
 
 		var alleles []string

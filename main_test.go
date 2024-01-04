@@ -2845,10 +2845,10 @@ func TestMNP(t *testing.T) {
 
 func TestManyAlleles(t *testing.T) {
 	versionLine := "##fileformat=VCFv4.x"
-	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11"}, "\t")
-	record := strings.Join([]string{"1", "1000", "rs1", "A", "AA,AC,AG,AT,C,G,T,ATA,ATC,ATG,ATT", ".", "PASS", "DP=100", "GT", "1|1", "2|2", "3|3", "4|4", "5|5", "6|6", "7|7", "8|8", "9|9", "10|10", "11|11"}, "\t")
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S1_2", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S11_HAPLOID"}, "\t")
+	record := strings.Join([]string{"1", "1000", "rs1", "A", "AA,AC,AG,AT,C,G,T,ATA,ATC,ATG,ATT", ".", "PASS", "DP=100", "GT", "1|1", "1|1", "2|2", "3|3", "4|4", "5|5", "6|6", "7|7", "8|8", "9|9", "10|10", "11|11", "11"}, "\t")
 
-	expectedAlleles := []string{"+A", "+C", "+G", "+T", "C", "G", "T", "+TA", "+TC", "+TG", "+TT"}
+	expectedAlleles := []string{"+A", "+C", "+G", "+T", "C", "G", "T", "+TA", "+TC", "+TG", "+TT", "+TT"}
 
 	allowedFilters := map[string]bool{"PASS": true, ".": true}
 
@@ -2866,13 +2866,31 @@ func TestManyAlleles(t *testing.T) {
 	readVcf(&config, reader, w)
 	w.Flush()
 
+	// Example Row
+	//[chr1 1000 MULTIALLELIC A +TT 0 ! 0 S11;S11_HAPLOID 0.167 ! 0 3 23 0.13]
+
+	expectedGtCount := "25" // 2 * 12 + 1 for the haploid genotype
+	expectedAltDosages := []string{"4", "2", "2", "2", "2", "2", "2", "2", "2", "2", "3"}
+	expectHomozygotes := []string{"S1;S1_2", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11;S11_HAPLOID"}
 	for results.Scan() {
 		index++
 
-		resultRow := strings.Split(results.Text(), "\t")
+		fields := strings.Split(results.Text(), "\t")
 
-		if resultRow[altIdx] != expectedAlleles[index] {
-			t.Errorf("alt should be %s, but is %s", expectedAlleles[index], resultRow[altIdx])
+		if fields[8] != expectHomozygotes[index] {
+			t.Errorf("Expected %s, got %s", expectHomozygotes[index], fields[8])
+		}
+
+		if fields[12] != expectedAltDosages[index] {
+			t.Errorf("Expected %s, got %s", expectedAltDosages[index], fields[12])
+		}
+
+		if fields[13] != expectedGtCount {
+			t.Errorf("Expected %s, got %s", expectedGtCount, fields[13])
+		}
+
+		if fields[altIdx] != expectedAlleles[index] {
+			t.Errorf("alt should be %s, but is %s", expectedAlleles[index], fields[altIdx])
 		}
 	}
 
