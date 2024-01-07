@@ -941,39 +941,46 @@ SAMPLES:
 	// NOTE: If any errors encountered, all genotypes in row will be skipped and logged, since
 	// this represents a likely corruption of data
 	for i := sampleIdx; i < len(header); i++ {
-		field := fields[i]
+		sampleGenotypeField := fields[i]
 
-		if field[0] == '.' {
-			missing = append(missing, header[i])
-			continue
-		}
-
-		// Speed up the common case, bi-allelic sites
-		if len(fields[i]) >= 3 {
-			if fields[i][0:3] == "0|0" || fields[i][0:3] == "0/0" {
+		// We want to speed up the common case, where the genotype is bi-allelic
+		// e.g. we allow 0|0, 0/0, 0|1, 1|0, 1/0, 0/1, 1|1, 1/1
+		// or those genotypes with other information, e.g. 0|0:DP:AD:GQ:PL
+		if (len(sampleGenotypeField) == 3 || (len(sampleGenotypeField) > 3 && sampleGenotypeField[3] == ':')) && // 0|0, 0/0, 1|1, 1/1 or with format, e.g. 0|1:DP
+			(sampleGenotypeField[1] == '|' || sampleGenotypeField[1] == '/') { // Not a haploid site with 100+ alleles, e.g. {0-9}|{0-9} or {0-9}/{0-9}
+			// Reference is the most common case, e.g. 0|0, 0/0
+			if sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == '0' {
 				totalGtCount += 2
-				continue
+				continue SAMPLES
 			}
 
-			if alleleNum == "1" {
-				if fields[i][0:3] == "0|1" || fields[i][0:3] == "1|0" || fields[i][0:3] == "1/0" || fields[i][0:3] == "0/1" {
-					totalGtCount += 2
-					totalAltCount += 1
-					hets = append(hets, header[i])
-					continue
-				}
+			// In this function, we only care about the alleleNum allele
+			// Any diploid genotype with an allele that is longer than 1 number will be longer than 3 characters
+			// E.g., if alleleNum is 10, then 0|10, 10|0, 10|10 will be the shortest possible genotype, 4 characters
+			if (sampleGenotypeField[0] == '0' && string(sampleGenotypeField[2]) == alleleNum) || (string(sampleGenotypeField[0]) == alleleNum && sampleGenotypeField[2] == '0') {
+				totalGtCount += 2
+				totalAltCount += 1
+				hets = append(hets, header[i])
+				continue SAMPLES
+			}
 
-				if fields[i][0:3] == "1|1" || fields[i][0:3] == "1/1" {
-					totalGtCount += 2
-					totalAltCount += 2
-					homs = append(homs, header[i])
-					continue
-				}
+			// Homozygote
+			if string(sampleGenotypeField[0]) == alleleNum && string(sampleGenotypeField[2]) == alleleNum {
+				totalGtCount += 2
+				totalAltCount += 2
+				homs = append(homs, header[i])
+				continue SAMPLES
+			}
+
+			// N|., .|N, .|., N/., ./N, ./. are all considered missing samples, because if one site is missing, the other is likely unreliable
+			if sampleGenotypeField[0] == '.' || sampleGenotypeField[2] == '.' {
+				missing = append(missing, header[i])
+				continue SAMPLES
 			}
 		}
 
 		// Split the field on the colon to separate alleles from additional information
-		parts := strings.SplitN(field, ":", 2)
+		parts := strings.SplitN(sampleGenotypeField, ":", 2)
 		alleleField := parts[0]
 
 		var sep string
