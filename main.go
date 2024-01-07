@@ -957,19 +957,21 @@ SAMPLES:
 			// In this function, we only care about the alleleNum allele
 			// Any diploid genotype with an allele that is longer than 1 number will be longer than 3 characters
 			// E.g., if alleleNum is 10, then 0|10, 10|0, 10|10 will be the shortest possible genotype, 4 characters
-			if (sampleGenotypeField[0] == '0' && string(sampleGenotypeField[2]) == alleleNum) || (string(sampleGenotypeField[0]) == alleleNum && sampleGenotypeField[2] == '0') {
-				totalGtCount += 2
-				totalAltCount += 1
-				hets = append(hets, header[i])
-				continue SAMPLES
-			}
+			if len(alleleNum) == 1 {
+				if (sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == alleleNum[0]) || (sampleGenotypeField[0] == alleleNum[0] && sampleGenotypeField[2] == '0') {
+					totalGtCount += 2
+					totalAltCount += 1
+					hets = append(hets, header[i])
+					continue SAMPLES
+				}
 
-			// Homozygote
-			if string(sampleGenotypeField[0]) == alleleNum && string(sampleGenotypeField[2]) == alleleNum {
-				totalGtCount += 2
-				totalAltCount += 2
-				homs = append(homs, header[i])
-				continue SAMPLES
+				// Homozygote
+				if sampleGenotypeField[0] == alleleNum[0] && sampleGenotypeField[2] == alleleNum[0] {
+					totalGtCount += 2
+					totalAltCount += 2
+					homs = append(homs, header[i])
+					continue SAMPLES
+				}
 			}
 
 			// N|., .|N, .|., N/., ./N, ./. are all considered missing samples, because if one site is missing, the other is likely unreliable
