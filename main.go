@@ -32,6 +32,7 @@ const (
 	filterIdx int = 6
 	infoIdx   int = 7
 	formatIdx int = 8
+	sampleIdx int = 9
 )
 
 const (
@@ -364,7 +365,7 @@ func makeSampleList(header []string) bytes.Buffer {
 		return buf
 	}
 
-	for i := 9; i < len(header); i++ {
+	for i := sampleIdx; i < len(header); i++ {
 		buf.WriteString(header[i])
 		buf.WriteByte(clByte)
 	}
@@ -430,8 +431,6 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 		log.Printf("Found 9 header fields. When genotypes present, we expect 1+ samples after FORMAT (10 fields minimum)")
 	}
 
-	iLookup := []rune{'1', '2', '3', '4', '5', '6', '7', '8', '9'}
-
 	var output bytes.Buffer
 	var record []string
 
@@ -454,24 +453,19 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 			}
 
 			siteType, positions, refs, alts, altIndices := getAlleles(record[chromIdx], record[posIdx], record[refIdx], record[altIdx])
+
 			if len(altIndices) == 0 {
 				continue
 			}
 
 			multiallelic = siteType == parse.Multi
 
-			// if last index > 9 then we can't accept the site, since won't be able
-			// to identify het/hom status
-			if altIndices[len(altIndices)-1] >= len(iLookup) {
-				log.Printf("%s %s:%s: We currently don't support sites with > %d minor alleles, found %d", record[chromIdx], record[posIdx], errorLvl, len(iLookup), len(altIndices))
-				continue
-			}
-
 			for i := range alts {
+				strAlt := strconv.Itoa(altIndices[i] + 1)
 				// If no samples are provided, annotate what we can, skipping hets and homs
 				// If samples are provided, but only missing genotypes, skip the site altogether
 				if numSamples > 0 {
-					homs, hets, missing, ac, an = makeHetHomozygotes(record, header, iLookup[altIndices[i]])
+					homs, hets, missing, ac, an = makeHetHomozygotes(record, header, strAlt)
 
 					if len(homs) == 0 && len(hets) == 0 {
 						continue
@@ -567,7 +561,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 				output.WriteByte(tabByte)
 				output.WriteString(strconv.Itoa(an))
 				output.WriteByte(tabByte)
-				
+
 				// TODO: can ac == 0 && (len(het) > 0 || len(hom) > 0) occur?
 				if ac == 0 {
 					output.WriteByte(zeroByte)
@@ -609,7 +603,6 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 
 		fileMutex.Unlock()
 	}
-
 
 	complete <- true
 }
@@ -931,22 +924,12 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 	return parse.Snp, positions, references, alleles, indexes
 }
 
-// Current limitations: Does not support alleleIdx > 9, or sites which have 2 digits allele numbers
-// This allows us to improve performance, decrease code verbosity
-// Most multialellics with > 10 alleles will be false positives
-// because a true site would require a mutation rate of >> 1e-8 (say in chromosomal instability) and 10k samples
-// or an effective population size of billions (vs 10k expected) ; else .001^10 == 10^-30 == never happens
-
-// TODO: decide whether to be more strict about missing genotypes
-// Currently some garbage like .... would be considered "missing"
-func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]string, []string, []string, int, int) {
-	simpleGt := !strings.Contains(fields[formatIdx], ":")
-
+// makeHetHomozygotes process all sample genotype fields, and for a single alleleNum, which is the allele index (1 based)
+// returns the homozygotes, heterozygotes, missing samples, total alt counts, genotype counts, and missing counts
+func makeHetHomozygotes(fields []string, header []string, alleleNum string) ([]string, []string, []string, int, int) {
 	var homs []string
 	var hets []string
 	var missing []string
-
-	var gt []string
 
 	var gtCount int
 	var altCount int
@@ -954,188 +937,80 @@ func makeHetHomozygotes(fields []string, header []string, alleleNum rune) ([]str
 	var totalAltCount int
 	var totalGtCount int
 
-	// Unfortunately there is no guarantee that genotypes will be consistently phased or unphased
-	/*  From https://samtools.github.io/hts-specs/VCFv4.1.pdf
-	#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT NA00001 NA00002 NA00003
-	20 14370 rs6054257 G A 29 PASS NS=3;DP=14;AF=0.5;DB;H2 GT:GQ:DP:HQ 0|0:48:1:51,51 1|0:48:8:51,51 1/1:43:5:.,.
-	20 17330 . T A 3 q10 NS=3;DP=11;AF=0.017 GT:GQ:DP:HQ 0|0:49:3:58,50 0|1:3:5:65,3 0/0:41:3
-	20 1110696 rs6040355 A G,T 67 PASS NS=2;DP=10;AF=0.333,0.667;AA=T;DB GT:GQ:DP:HQ 1|2:21:6:23,27 2|1:2:0:18,2 2/2:35:4
-	20 1230237 . T . 47 PASS NS=3;DP=13;AA=T GT:GQ:DP:HQ 0|0:54:7:56,60 0|0:48:4:51,51 0/0:61:2
-	20 1234567 microsat1 GTC G,GTCT 50 PASS NS=3;DP=9;AA=G GT:GQ:DP 0/1:35:4 0/2:17:2 1/1:40:3
-	*/
 SAMPLES:
 	// NOTE: If any errors encountered, all genotypes in row will be skipped and logged, since
 	// this represents a likely corruption of data
-	for i := 9; i < len(header); i++ {
-		// If any 1 allele missing the genotype is, by definition missing
-		// Applies to haploid as well as diploid+ sites
-		if fields[i][0] == '.' {
-			missing = append(missing, header[i])
-			continue
-		}
+	for i := sampleIdx; i < len(header); i++ {
+		sampleGenotypeField := fields[i]
 
-		// haploid
-		if len(fields[i]) == 1 || fields[i][1] == ':' {
-			if fields[i][0] == '0' {
-				totalGtCount++
-				continue
+		// We want to speed up the common case, where the genotype is bi-allelic
+		// e.g. we allow 0|0, 0/0, 0|1, 1|0, 1/0, 0/1, 1|1, 1/1
+		// or those genotypes with other information, e.g. 0|0:DP:AD:GQ:PL
+		if (len(sampleGenotypeField) == 3 || (len(sampleGenotypeField) > 3 && sampleGenotypeField[3] == ':')) && // 0|0, 0/0, 1|1, 1/1 or with format, e.g. 0|1:DP
+			(sampleGenotypeField[1] == '|' || sampleGenotypeField[1] == '/') { // Not a haploid site with 100+ alleles, e.g. {0-9}|{0-9} or {0-9}/{0-9}
+			// Reference is the most common case, e.g. 0|0, 0/0
+			if sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == '0' {
+				totalGtCount += 2
+				continue SAMPLES
 			}
 
-			// We don't support haploid genotypes very well; I will count such sites
-			// homozygous, because Dave Cutler says that is what people would mostly expect
-			// Note: downstream tools will typicaly consider homozygotes to have 2 copies of the alt
-			// and hets to have 1 copy of the alt, so special consideration must be made for haploids
-			// in such tools
-			if rune(fields[i][0]) == alleleNum {
-				totalAltCount++
-				totalGtCount++
-				homs = append(homs, header[i])
-				continue
-			}
-
-			continue
-		}
-
-		if len(fields[i]) < 3 {
-			log.Printf("%s:%s : Skipping. Couldn't decode genotype %s (expected at least 3 characters)", fields[chromIdx], fields[posIdx], fields[i])
-			return nil, nil, nil, 0, 0
-		}
-
-		// If for some reason the first allele call isn't . but 2nd is,
-		// send that to missing too
-		// Important to check here, because even if !simpleGt, GATK
-		// will not output genotype QC data for missing genotypes
-		// i.e, even with a format string (0/0:1,2:3:4:etc), we will see './.'
-		if fields[i][2] == '.' {
-			missing = append(missing, header[i])
-			continue
-		}
-
-		// Allow for some rare cases where > 10 alleles (including reference)
-		if fields[i][1] == '|' || fields[i][2] == '|' {
-			// Speed up the most common cases
-			if simpleGt {
-				if fields[i] == "0|0" {
+			// In this function, we only care about the alleleNum allele
+			// Any diploid genotype with an allele that is longer than 1 number will be longer than 3 characters
+			// E.g., if alleleNum is 10, then 0|10, 10|0, 10|10 will be the shortest possible genotype, 4 characters
+			if len(alleleNum) == 1 {
+				if (sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == alleleNum[0]) || (sampleGenotypeField[0] == alleleNum[0] && sampleGenotypeField[2] == '0') {
 					totalGtCount += 2
-					continue
+					totalAltCount += 1
+					hets = append(hets, header[i])
+					continue SAMPLES
 				}
 
-				// No longer strictly needed because of line 863
-				// if fields[i] == ".|." {
-				//   missing = append(missing, header[i])
-				//   continue
-				// }
-
-				if alleleNum == '1' {
-					if fields[i] == "0|1" || fields[i] == "1|0" {
-						totalGtCount += 2
-						totalAltCount++
-						hets = append(hets, header[i])
-						continue
-					}
-
-					if fields[i] == "1|1" {
-						totalGtCount += 2
-						totalAltCount += 2
-						homs = append(homs, header[i])
-						continue
-					}
-				}
-			} else {
-				if fields[i][0:4] == "0|0:" {
+				// Homozygote
+				if sampleGenotypeField[0] == alleleNum[0] && sampleGenotypeField[2] == alleleNum[0] {
 					totalGtCount += 2
-					continue
-				}
-
-				if alleleNum == '1' {
-					if fields[i][0:4] == "0|1:" || fields[i][0:4] == "1|0:" {
-						totalGtCount += 2
-						totalAltCount++
-						hets = append(hets, header[i])
-						continue
-					}
-
-					if fields[i][0:4] == "1|1:" {
-						totalGtCount += 2
-						totalAltCount += 2
-						homs = append(homs, header[i])
-						continue
-					}
+					totalAltCount += 2
+					homs = append(homs, header[i])
+					continue SAMPLES
 				}
 			}
 
-			gt = strings.Split(fields[i], "|")
+			// N|., .|N, .|., N/., ./N, ./. are all considered missing samples, because if one site is missing, the other is likely unreliable
+			if sampleGenotypeField[0] == '.' || sampleGenotypeField[2] == '.' {
+				missing = append(missing, header[i])
+				continue SAMPLES
+			}
+		}
+
+		// Split the field on the colon to separate alleles from additional information
+		parts := strings.SplitN(sampleGenotypeField, ":", 2)
+		alleleField := parts[0]
+
+		var sep string
+		if strings.Contains(alleleField, "|") {
+			sep = "|"
+		} else if strings.Contains(alleleField, "/") {
+			sep = "/"
 		} else {
-			// alleles separated by /, or some very malformed file
-			if simpleGt {
-				if fields[i] == "0/0" {
-					totalGtCount += 2
-					continue
-				}
-
-				if alleleNum == '1' {
-					if fields[i] == "0/1" || fields[i] == "1/0" {
-						totalGtCount += 2
-						totalAltCount++
-						hets = append(hets, header[i])
-						continue
-					}
-
-					if fields[i] == "1/1" {
-						totalGtCount += 2
-						totalAltCount += 2
-						homs = append(homs, header[i])
-						continue
-					}
-				}
-			} else {
-				if len(fields[i]) < 4 {
-					log.Printf("%s:%s : Skipping. Couldn't decode genotype %s (expected FORMAT data)", fields[chromIdx], fields[posIdx], fields[i])
-					return nil, nil, nil, 0, 0
-				}
-
-				if fields[i][0:4] == "0/0:" {
-					totalGtCount += 2
-					continue
-				}
-
-				if alleleNum == '1' {
-					if fields[i][0:4] == "0/1:" || fields[i][0:4] == "1/0:" {
-						totalGtCount += 2
-						totalAltCount++
-						hets = append(hets, header[i])
-						continue
-					}
-
-					if fields[i] == "1/1:" {
-						totalGtCount += 2
-						totalAltCount += 2
-						homs = append(homs, header[i])
-						continue
-					}
-				}
-			}
-
-			gt = strings.Split(fields[i], "/")
+			sep = ""
 		}
 
-		//https://play.golang.org/p/zjUf2rhBHn
-		if len(gt) == 1 {
-			log.Printf("%s:%s : Skipping. Couldn't decode genotype %s", fields[chromIdx], fields[posIdx], fields[i])
-			return nil, nil, nil, 0, 0
+		var alleles []string
+		if sep != "" {
+			alleles = strings.Split(alleleField, sep)
+		} else {
+			alleles = []string{alleleField}
 		}
 
-		// We should only get here for triploid+ and multiallelics
 		altCount = 0
 		gtCount = 0
-		// log.Print(gt)
-		for _, val := range gt {
-			if val[0] == '.' {
+
+		for _, allele := range alleles {
+			if allele == "." {
 				missing = append(missing, header[i])
 				continue SAMPLES
 			}
 
-			if rune(val[0]) == alleleNum {
+			if allele == alleleNum {
 				altCount++
 			}
 
