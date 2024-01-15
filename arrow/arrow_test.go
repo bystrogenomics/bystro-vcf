@@ -79,9 +79,9 @@ func TestArrowWriteRead(t *testing.T) {
 		log.Fatal(err)
 	}
 	defer reader.Close()
+	defer os.Remove(filePath)
 
 	for i := 0; i < reader.NumRecords(); i++ {
-		log.Println("i ", i)
 		record, err := reader.Record(i)
 		if err != nil {
 			log.Fatal(err)
@@ -90,8 +90,6 @@ func TestArrowWriteRead(t *testing.T) {
 		if record.NumCols() != int64(len(fieldNames)) {
 			log.Fatal("Number of columns in record does not match number of field names")
 		}
-
-		log.Print("record ", record.Columns())
 
 		for colIdx, col := range record.Columns() {
 			floatArr, ok := col.(*array.Float64)
@@ -114,22 +112,10 @@ func TestArrowWriteRead(t *testing.T) {
 
 				expectdValue := rows[originalIdx][colIdx]
 
-				log.Println("originalIdx ", originalIdx, " rowIdx ", rowIdx, " floatArr.Value(rowIdx) ", foundValue, " expectdValue ", expectdValue)
-
 				if foundValue != expectdValue {
 					log.Fatal("Value in column does not match value in row ", foundValue, expectdValue)
 				}
 			}
-			//
-
-			// 	value := floatArr.Value(rowIdx)
-			// 	log.Println("rows[j][colIdx] ", rows[originalIdx][colIdx], " col.(*array.Float64).Value(0) ", value)
-			// }
-			// if rows[i][j] != col.(*array.Float64).Value(0) {
-			// 	log.Fatal("Value in column does not match value in row ", rows[i][j], col.(*array.Float64).Value(0))
-			// }
-			// log.Println("colIdx ", colIdx, " col ", col)
-
 		}
 	}
 }

@@ -78,8 +78,9 @@ func (aw *ArrowWriter) Write(row []float64) error {
 func (aw *ArrowWriter) writeChunk() error {
 	var cols []arrow.Array
 	for _, b := range aw.builders {
+		// NewArray creates a new array from the builder and resets the builder
+		// See: https://github.com/apache/arrow/blob/maint-14.0.2/go/arrow/array/builder.go#L84
 		cols = append(cols, b.NewArray())
-		b.Release()
 	}
 
 	record := array.NewRecord(aw.schema, cols, int64(aw.numRowsInChunk))
@@ -91,9 +92,6 @@ func (aw *ArrowWriter) writeChunk() error {
 
 	// Reset for the next chunk
 	aw.numRowsInChunk = 0
-	for i := range aw.builders {
-		aw.builders[i] = array.NewFloat64Builder(aw.pool)
-	}
 
 	return nil
 }
