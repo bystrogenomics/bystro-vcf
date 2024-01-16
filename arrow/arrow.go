@@ -3,6 +3,7 @@ package arrow
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/apache/arrow/go/v14/arrow"
 	"github.com/apache/arrow/go/v14/arrow/array"
@@ -18,6 +19,7 @@ type ArrowWriter struct {
 	pool           *memory.GoAllocator
 	chunkSize      int
 	numRowsInChunk int
+	mu             sync.Mutex
 }
 
 func NewArrowWriter(filePath string, fieldNames []string, chunkSize int) (*ArrowWriter, error) {
@@ -25,7 +27,7 @@ func NewArrowWriter(filePath string, fieldNames []string, chunkSize int) (*Arrow
 	fields := make([]arrow.Field, len(fieldNames))
 
 	for i, name := range fieldNames {
-		fields[i] = arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Float64}
+		fields[i] = arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Uint16}
 	}
 
 	schema := arrow.NewSchema(fields, nil)
@@ -41,7 +43,7 @@ func NewArrowWriter(filePath string, fieldNames []string, chunkSize int) (*Arrow
 
 	builders := make([]array.Builder, len(fields))
 	for i := range fields {
-		builders[i] = array.NewFloat64Builder(pool)
+		builders[i] = array.NewUint16Builder(pool)
 	}
 
 	return &ArrowWriter{
@@ -55,13 +57,16 @@ func NewArrowWriter(filePath string, fieldNames []string, chunkSize int) (*Arrow
 	}, nil
 }
 
-func (aw *ArrowWriter) Write(row []float64) error {
+func (aw *ArrowWriter) Write(row []uint16) error {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
 	if len(row) != len(aw.builders) {
 		return fmt.Errorf("mismatch in number of fields: expected %d, got %d", len(aw.builders), len(row))
 	}
 
 	for i, val := range row {
-		aw.builders[i].(*array.Float64Builder).Append(val)
+		aw.builders[i].(*array.Uint16Builder).Append(val)
 	}
 
 	aw.numRowsInChunk++
@@ -97,6 +102,9 @@ func (aw *ArrowWriter) writeChunk() error {
 }
 
 func (aw *ArrowWriter) Close() error {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
 	// Write any remaining data
 	if aw.numRowsInChunk > 0 {
 		if err := aw.writeChunk(); err != nil {

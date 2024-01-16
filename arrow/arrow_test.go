@@ -3,69 +3,14 @@ package arrow
 import (
 	"log"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/apache/arrow/go/v14/arrow/array"
 	"github.com/apache/arrow/go/v14/arrow/ipc"
 )
 
-func TestArrowWriteRead(t *testing.T) {
-	batchSize := 5
-	fieldNames := []string{"Sample1", "Sample2", "Sample3"}
-	filePath := "test_matrix.feather"
-	writer, err := NewArrowWriter(filePath, fieldNames, batchSize)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Example usage
-	rows := [][]float64{
-		{1.1, 2.2, 3.3},
-		{4.4, 5.5, 6.6},
-		{7.7, 8.8, 9.9},
-		{10.1, 11.2, 12.3},
-		{13.4, 14.5, 15.6},
-		{16.7, 17.8, 18.9},
-		{19.1, 20.2, 21.3},
-		{22.4, 23.5, 24.6},
-		{25.7, 26.8, 27.9},
-		{28.1, 29.2, 30.3},
-		{31.4, 32.5, 33.6},
-		{34.7, 35.8, 36.9},
-		{37.1, 38.2, 39.3},
-		{40.4, 41.5, 42.6},
-		{43.7, 44.8, 45.9},
-		{46.1, 47.2, 48.3},
-		{49.4, 50.5, 51.6},
-		{52.7, 53.8, 54.9},
-		{55.1, 56.2, 57.3},
-		{58.4, 59.5, 60.6},
-		{61.7, 62.8, 63.9},
-		{64.1, 65.2, 66.3},
-		{67.4, 68.5, 69.6},
-		{70.7, 71.8, 72.9},
-		{73.1, 74.2, 75.3},
-		{76.4, 77.5, 78.6},
-		{79.7, 80.8, 81.9},
-		{82.1, 83.2, 84.3},
-		{85.4, 86.5, 87.6},
-		{88.7, 89.8, 90.9},
-		{91.1, 92.2, 93.3},
-		{94.4, 95.5, 96.6},
-		{97.7, 98.8, 99.9},
-		{100.1, 101.2, 102.3},
-		// Add more rows as needed
-	}
-
-	for _, row := range rows {
-		if err := writer.Write(row); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		log.Fatal(err)
-	}
-
+func readAndVeryifyArrowFile(filePath string, fieldNames []string, batchSize int, rows [][]uint16) {
 	// Open the file for reading
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -92,15 +37,15 @@ func TestArrowWriteRead(t *testing.T) {
 		}
 
 		for colIdx, col := range record.Columns() {
-			floatArr, ok := col.(*array.Float64)
+			arr, ok := col.(*array.Uint16)
 			if !ok {
-				log.Fatal("Column is not of type Float64")
+				log.Fatal("Column is not of type Uint16")
 			}
 
 			for rowIdx := 0; rowIdx < batchSize; rowIdx++ {
 				originalIdx := batchSize*i + rowIdx
 
-				if floatArr.Len() == rowIdx {
+				if arr.Len() == rowIdx {
 					if originalIdx == len(rows) {
 						break
 					}
@@ -108,7 +53,7 @@ func TestArrowWriteRead(t *testing.T) {
 					log.Fatal("Column length does not match number of rows")
 				}
 
-				foundValue := floatArr.Value(rowIdx)
+				foundValue := arr.Value(rowIdx)
 
 				expectdValue := rows[originalIdx][colIdx]
 
@@ -118,4 +63,59 @@ func TestArrowWriteRead(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestArrowWriteRead(t *testing.T) {
+	batchSize := 5
+	fieldNames := []string{"Sample1", "Sample2", "Sample3"}
+	filePath := "test_matrix.feather"
+	writer, err := NewArrowWriter(filePath, fieldNames, batchSize)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Example with 100 rows
+	rows := make([][]uint16, 100)
+	for i := 0; i < 100; i++ {
+		rows[i] = []uint16{uint16(i), uint16(i + 1), uint16(i + 2)}
+	}
+
+	for _, row := range rows {
+		if err := writer.Write(row); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	readAndVeryifyArrowFile(filePath, fieldNames, batchSize, rows)
+}
+
+func TestArrowWriterConcurrency(t *testing.T) {
+	fieldNames := []string{"Field1", "Field2"}
+	writer, err := NewArrowWriter("concurrent_output.feather", fieldNames, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+
+	var wg sync.WaitGroup
+	numGoroutines := 5
+	numWritesPerRoutine := 10
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(writer *ArrowWriter, routineID int) {
+			defer wg.Done()
+			for j := 0; j < numWritesPerRoutine; j++ {
+				// rowIndex := "row_" + strconv.Itoa(routineID) + "_" + strconv.Itoa(j)
+				if err := writer.Write([]uint16{uint16(routineID), uint16(j)}); err != nil {
+					t.Error(err)
+				}
+			}
+		}(writer, i)
+	}
+
+	wg.Wait()
 }
