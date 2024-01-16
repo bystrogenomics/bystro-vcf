@@ -19,15 +19,52 @@ type ArrowWriter struct {
 	pool           *memory.GoAllocator
 	chunkSize      int
 	numRowsInChunk int
+	appendFuncs    []func(array.Builder, interface{}) error
 	mu             sync.Mutex
 }
 
-func NewArrowWriter(filePath string, fieldNames []string, chunkSize int) (*ArrowWriter, error) {
+func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType, chunkSize int) (*ArrowWriter, error) {
 	pool := memory.NewGoAllocator()
-	fields := make([]arrow.Field, len(fieldNames))
+	fields := make([]arrow.Field, len(fieldTypes))
+	builders := make([]array.Builder, len(fieldTypes))
+	appendFuncs := make([]func(array.Builder, interface{}) error, len(fieldTypes))
 
-	for i, name := range fieldNames {
-		fields[i] = arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Uint16}
+	for i, dataType := range fieldTypes {
+		fields[i] = arrow.Field{Name: fieldNames[i], Type: dataType}
+		switch dataType {
+		case arrow.PrimitiveTypes.Uint16:
+			builders[i] = array.NewUint16Builder(pool)
+			appendFuncs[i] = appendUint16
+		case arrow.PrimitiveTypes.Uint32:
+			builders[i] = array.NewUint32Builder(pool)
+			appendFuncs[i] = appendUint32
+		case arrow.PrimitiveTypes.Uint64:
+			builders[i] = array.NewUint64Builder(pool)
+			appendFuncs[i] = appendUint64
+		case arrow.PrimitiveTypes.Int16:
+			builders[i] = array.NewInt16Builder(pool)
+			appendFuncs[i] = appendInt16
+		case arrow.PrimitiveTypes.Int32:
+			builders[i] = array.NewInt32Builder(pool)
+			appendFuncs[i] = appendInt32
+		case arrow.PrimitiveTypes.Int64:
+			builders[i] = array.NewInt64Builder(pool)
+			appendFuncs[i] = appendInt64
+		case arrow.PrimitiveTypes.Float32:
+			builders[i] = array.NewFloat32Builder(pool)
+			appendFuncs[i] = appendFloat32
+		case arrow.PrimitiveTypes.Float64:
+			builders[i] = array.NewFloat64Builder(pool)
+			appendFuncs[i] = appendFloat64
+		case arrow.BinaryTypes.String:
+			builders[i] = array.NewStringBuilder(pool)
+			appendFuncs[i] = appendString
+		case arrow.FixedWidthTypes.Boolean:
+			builders[i] = array.NewBooleanBuilder(pool)
+			appendFuncs[i] = appendBool
+		default:
+			return nil, fmt.Errorf("unsupported data type: %s", dataType)
+		}
 	}
 
 	schema := arrow.NewSchema(fields, nil)
@@ -41,11 +78,6 @@ func NewArrowWriter(filePath string, fieldNames []string, chunkSize int) (*Arrow
 		return nil, err
 	}
 
-	builders := make([]array.Builder, len(fields))
-	for i := range fields {
-		builders[i] = array.NewUint16Builder(pool)
-	}
-
 	return &ArrowWriter{
 		filePath:       filePath,
 		schema:         schema,
@@ -54,10 +86,11 @@ func NewArrowWriter(filePath string, fieldNames []string, chunkSize int) (*Arrow
 		pool:           pool,
 		chunkSize:      chunkSize,
 		numRowsInChunk: 0,
+		appendFuncs:    appendFuncs,
 	}, nil
 }
 
-func (aw *ArrowWriter) Write(row []uint16) error {
+func (aw *ArrowWriter) Write(row []interface{}) error {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
@@ -66,7 +99,9 @@ func (aw *ArrowWriter) Write(row []uint16) error {
 	}
 
 	for i, val := range row {
-		aw.builders[i].(*array.Uint16Builder).Append(val)
+		if err := aw.appendFuncs[i](aw.builders[i], val); err != nil {
+			return fmt.Errorf("error appending to column %d: %v", i, err)
+		}
 	}
 
 	aw.numRowsInChunk++
@@ -112,4 +147,91 @@ func (aw *ArrowWriter) Close() error {
 		}
 	}
 	return aw.writer.Close()
+}
+
+func appendUint16(builder array.Builder, val interface{}) error {
+	if v, ok := val.(uint16); ok {
+		builder.(*array.Uint16Builder).Append(v)
+		return nil
+	}
+	return fmt.Errorf("type mismatch, expected uint16")
+}
+
+func appendUint32(builder array.Builder, val interface{}) error {
+	if v, ok := val.(uint32); ok {
+		builder.(*array.Uint32Builder).Append(v)
+		return nil
+	}
+	return fmt.Errorf("type mismatch, expected uint32")
+}
+
+func appendUint64(builder array.Builder, val interface{}) error {
+	if v, ok := val.(uint64); ok {
+		builder.(*array.Uint64Builder).Append(v)
+		return nil
+	}
+	return fmt.Errorf("type mismatch, expected uint64")
+}
+
+func appendInt16(builder array.Builder, val interface{}) error {
+	if v, ok := val.(int16); ok {
+		builder.(*array.Int16Builder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected int16")
+}
+
+func appendInt32(builder array.Builder, val interface{}) error {
+	if v, ok := val.(int32); ok {
+		builder.(*array.Int32Builder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected int32")
+}
+
+func appendInt64(builder array.Builder, val interface{}) error {
+	if v, ok := val.(int64); ok {
+		builder.(*array.Int64Builder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected int64")
+}
+
+func appendFloat32(builder array.Builder, val interface{}) error {
+	if v, ok := val.(float32); ok {
+		builder.(*array.Float32Builder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected float32")
+}
+
+func appendFloat64(builder array.Builder, val interface{}) error {
+	if v, ok := val.(float64); ok {
+		builder.(*array.Float64Builder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected float64")
+}
+
+func appendString(builder array.Builder, val interface{}) error {
+	if v, ok := val.(string); ok {
+		builder.(*array.StringBuilder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected string")
+}
+
+func appendBool(builder array.Builder, val interface{}) error {
+	if v, ok := val.(bool); ok {
+		builder.(*array.BooleanBuilder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected bool")
 }

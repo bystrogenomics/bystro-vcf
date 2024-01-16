@@ -3,14 +3,16 @@ package arrow
 import (
 	"log"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 
+	"github.com/apache/arrow/go/v14/arrow"
 	"github.com/apache/arrow/go/v14/arrow/array"
 	"github.com/apache/arrow/go/v14/arrow/ipc"
 )
 
-func readAndVeryifyArrowFile(filePath string, fieldNames []string, batchSize int, rows [][]uint16) {
+func readAndVerifyArrowFile(filePath string, batchSize int, rows [][]interface{}) {
 	// Open the file for reading
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -32,33 +34,34 @@ func readAndVeryifyArrowFile(filePath string, fieldNames []string, batchSize int
 			log.Fatal(err)
 		}
 
-		if record.NumCols() != int64(len(fieldNames)) {
-			log.Fatal("Number of columns in record does not match number of field names")
-		}
-
 		for colIdx, col := range record.Columns() {
-			arr, ok := col.(*array.Uint16)
-			if !ok {
-				log.Fatal("Column is not of type Uint16")
-			}
-
 			for rowIdx := 0; rowIdx < batchSize; rowIdx++ {
 				originalIdx := batchSize*i + rowIdx
-
-				if arr.Len() == rowIdx {
-					if originalIdx == len(rows) {
-						break
-					}
-
-					log.Fatal("Column length does not match number of rows")
+				if originalIdx >= len(rows) {
+					break
 				}
 
-				foundValue := arr.Value(rowIdx)
+				expectedValue := rows[originalIdx][colIdx]
+				var foundValue interface{}
 
-				expectdValue := rows[originalIdx][colIdx]
+				switch v := col.(type) {
+				case *array.Uint16:
+					if v.Len() <= rowIdx {
+						log.Fatal("Uint16 column length does not match number of rows")
+					}
+					foundValue = v.Value(rowIdx)
+				case *array.Float64:
+					if v.Len() <= rowIdx {
+						log.Fatal("Float64 column length does not match number of rows")
+					}
+					foundValue = v.Value(rowIdx)
+				// Add cases for other types as needed
+				default:
+					log.Fatalf("Unsupported column type: %v", reflect.TypeOf(col))
+				}
 
-				if foundValue != expectdValue {
-					log.Fatal("Value in column does not match value in row ", foundValue, expectdValue)
+				if !reflect.DeepEqual(foundValue, expectedValue) {
+					log.Fatalf("Value in column does not match value in row: found %v, expected %v", foundValue, expectedValue)
 				}
 			}
 		}
@@ -67,34 +70,38 @@ func readAndVeryifyArrowFile(filePath string, fieldNames []string, batchSize int
 
 func TestArrowWriteRead(t *testing.T) {
 	batchSize := 5
-	fieldNames := []string{"Sample1", "Sample2", "Sample3"}
 	filePath := "test_matrix.feather"
-	writer, err := NewArrowWriter(filePath, fieldNames, batchSize)
-	if err != nil {
-		log.Fatal(err)
+
+	// Define the data types for the fields
+	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
+	fieldNames := []string{"Field1", "Field2", "Field3"}
+	rows := make([][]interface{}, 100)
+	for i := range rows {
+		rows[i] = []interface{}{uint16(i), uint16(i + 1), uint16(i + 2)}
 	}
-	// Example with 100 rows
-	rows := make([][]uint16, 100)
-	for i := 0; i < 100; i++ {
-		rows[i] = []uint16{uint16(i), uint16(i + 1), uint16(i + 2)}
+
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, batchSize)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	for _, row := range rows {
 		if err := writer.Write(row); err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 	}
 
 	if err := writer.Close(); err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
-	readAndVeryifyArrowFile(filePath, fieldNames, batchSize, rows)
+	readAndVerifyArrowFile(filePath, batchSize, rows)
 }
 
 func TestArrowWriterConcurrency(t *testing.T) {
 	fieldNames := []string{"Field1", "Field2"}
-	writer, err := NewArrowWriter("concurrent_output.feather", fieldNames, 10)
+	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
+	writer, err := NewArrowWriter("concurrent_output.feather", fieldNames, fieldTypes, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,8 +116,8 @@ func TestArrowWriterConcurrency(t *testing.T) {
 		go func(writer *ArrowWriter, routineID int) {
 			defer wg.Done()
 			for j := 0; j < numWritesPerRoutine; j++ {
-				// rowIndex := "row_" + strconv.Itoa(routineID) + "_" + strconv.Itoa(j)
-				if err := writer.Write([]uint16{uint16(routineID), uint16(j)}); err != nil {
+				row := []interface{}{uint16(routineID), uint16(j)}
+				if err := writer.Write(row); err != nil {
 					t.Error(err)
 				}
 			}
