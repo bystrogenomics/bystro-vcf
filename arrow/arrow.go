@@ -141,6 +141,8 @@ func (arb *ArrowRowBuilder) writeChunk() error {
 
 // Release releases the ArrowRowBuilder. This must be called to ensure that all
 // data is successfully written to the file.
+// Release will write any remaining rows to the file, and so must be called before
+// Close() on the underlying ArrowWriter.
 func (arb *ArrowRowBuilder) Release() error {
 	if arb.numRowsInChunk > 0 {
 		err := arb.writeChunk()
