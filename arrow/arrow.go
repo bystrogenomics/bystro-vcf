@@ -12,62 +12,16 @@ import (
 )
 
 type ArrowWriter struct {
-	filePath       string
-	schema         *arrow.Schema
-	writer         *ipc.FileWriter
-	builders       []array.Builder
-	pool           *memory.GoAllocator
-	chunkSize      int
-	numRowsInChunk int
-	appendFuncs    []func(array.Builder, interface{}) error
-	mu             sync.Mutex
+	filePath  string
+	schema    *arrow.Schema
+	writer    *ipc.FileWriter
+	chunkSize int
+	mu        sync.Mutex
 }
 
 func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType, chunkSize int) (*ArrowWriter, error) {
-	pool := memory.NewGoAllocator()
-	fields := make([]arrow.Field, len(fieldTypes))
-	builders := make([]array.Builder, len(fieldTypes))
-	appendFuncs := make([]func(array.Builder, interface{}) error, len(fieldTypes))
+	schema := makeSchema(fieldNames, fieldTypes)
 
-	for i, dataType := range fieldTypes {
-		fields[i] = arrow.Field{Name: fieldNames[i], Type: dataType}
-		switch dataType {
-		case arrow.PrimitiveTypes.Uint16:
-			builders[i] = array.NewUint16Builder(pool)
-			appendFuncs[i] = appendUint16
-		case arrow.PrimitiveTypes.Uint32:
-			builders[i] = array.NewUint32Builder(pool)
-			appendFuncs[i] = appendUint32
-		case arrow.PrimitiveTypes.Uint64:
-			builders[i] = array.NewUint64Builder(pool)
-			appendFuncs[i] = appendUint64
-		case arrow.PrimitiveTypes.Int16:
-			builders[i] = array.NewInt16Builder(pool)
-			appendFuncs[i] = appendInt16
-		case arrow.PrimitiveTypes.Int32:
-			builders[i] = array.NewInt32Builder(pool)
-			appendFuncs[i] = appendInt32
-		case arrow.PrimitiveTypes.Int64:
-			builders[i] = array.NewInt64Builder(pool)
-			appendFuncs[i] = appendInt64
-		case arrow.PrimitiveTypes.Float32:
-			builders[i] = array.NewFloat32Builder(pool)
-			appendFuncs[i] = appendFloat32
-		case arrow.PrimitiveTypes.Float64:
-			builders[i] = array.NewFloat64Builder(pool)
-			appendFuncs[i] = appendFloat64
-		case arrow.BinaryTypes.String:
-			builders[i] = array.NewStringBuilder(pool)
-			appendFuncs[i] = appendString
-		case arrow.FixedWidthTypes.Boolean:
-			builders[i] = array.NewBooleanBuilder(pool)
-			appendFuncs[i] = appendBool
-		default:
-			return nil, fmt.Errorf("unsupported data type: %s", dataType)
-		}
-	}
-
-	schema := arrow.NewSchema(fields, nil)
 	file, err := os.Create(filePath)
 	if err != nil {
 		return nil, err
@@ -79,59 +33,20 @@ func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.Dat
 	}
 
 	return &ArrowWriter{
-		filePath:       filePath,
-		schema:         schema,
-		writer:         writer,
-		builders:       builders,
-		pool:           pool,
-		chunkSize:      chunkSize,
-		numRowsInChunk: 0,
-		appendFuncs:    appendFuncs,
+		filePath:  filePath,
+		schema:    schema,
+		writer:    writer,
+		chunkSize: chunkSize,
 	}, nil
 }
 
-func (aw *ArrowWriter) Write(row []interface{}) error {
+func (aw *ArrowWriter) writeChunk(record arrow.Record) error {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
-
-	if len(row) != len(aw.builders) {
-		return fmt.Errorf("mismatch in number of fields: expected %d, got %d", len(aw.builders), len(row))
-	}
-
-	for i, val := range row {
-		if err := aw.appendFuncs[i](aw.builders[i], val); err != nil {
-			return fmt.Errorf("error appending to column %d: %v", i, err)
-		}
-	}
-
-	aw.numRowsInChunk++
-
-	if aw.numRowsInChunk == aw.chunkSize {
-		if err := aw.writeChunk(); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (aw *ArrowWriter) writeChunk() error {
-	var cols []arrow.Array
-	for _, b := range aw.builders {
-		// NewArray creates a new array from the builder and resets the builder
-		// See: https://github.com/apache/arrow/blob/maint-14.0.2/go/arrow/array/builder.go#L84
-		cols = append(cols, b.NewArray())
-	}
-
-	record := array.NewRecord(aw.schema, cols, int64(aw.numRowsInChunk))
-	defer record.Release()
 
 	if err := aw.writer.Write(record); err != nil {
 		return err
 	}
-
-	// Reset for the next chunk
-	aw.numRowsInChunk = 0
 
 	return nil
 }
@@ -140,13 +55,84 @@ func (aw *ArrowWriter) Close() error {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
-	// Write any remaining data
-	if aw.numRowsInChunk > 0 {
-		if err := aw.writeChunk(); err != nil {
+	return aw.writer.Close()
+}
+
+type ArrowRowBuilder struct {
+	builders       []array.Builder
+	appendFuncs    []func(array.Builder, interface{}) error
+	pool           *memory.GoAllocator
+	arrowWriter    *ArrowWriter
+	numRowsInChunk int
+}
+
+func NewArrowRowBuilder(aw *ArrowWriter) (*ArrowRowBuilder, error) {
+	pool := memory.NewGoAllocator()
+	builders, appendFuncs, err := makeBuilders(aw.schema, pool)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ArrowRowBuilder{
+		builders:       builders,
+		appendFuncs:    appendFuncs,
+		pool:           pool,
+		arrowWriter:    aw,
+		numRowsInChunk: 0,
+	}, nil
+}
+
+func (arb *ArrowRowBuilder) WriteRow(row []interface{}) error {
+	if len(row) != len(arb.builders) {
+		return fmt.Errorf("mismatch in number of fields: expected %d, got %d", len(arb.builders), len(row))
+	}
+
+	for i, val := range row {
+		if err := arb.appendFuncs[i](arb.builders[i], val); err != nil {
+			return fmt.Errorf("error appending to column %d: %v", i, err)
+		}
+	}
+
+	arb.numRowsInChunk++
+
+	if arb.numRowsInChunk == arb.arrowWriter.chunkSize {
+		arb.writeChunk()
+		arb.numRowsInChunk = 0
+	}
+
+	return nil
+}
+
+func (arb *ArrowRowBuilder) writeChunk() error {
+	var cols []arrow.Array
+	for _, b := range arb.builders {
+		// NewArray creates a new array from the builder and resets the builder
+		// See: https://github.com/apache/arrow/blob/maint-14.0.2/go/arrow/array/builder.go#L84
+		cols = append(cols, b.NewArray())
+	}
+
+	record := array.NewRecord(arb.arrowWriter.schema, cols, int64(arb.numRowsInChunk))
+	defer record.Release()
+
+	return nil
+}
+
+func (arb *ArrowRowBuilder) Release() error {
+	if arb.numRowsInChunk > 0 {
+		err := arb.writeChunk()
+		arb.numRowsInChunk = 0
+
+		if err != nil {
 			return err
 		}
 	}
-	return aw.writer.Close()
+
+	for _, builder := range arb.builders {
+		builder.Release()
+	}
+
+	return nil
 }
 
 func appendUint16(builder array.Builder, val interface{}) error {
@@ -234,4 +220,60 @@ func appendBool(builder array.Builder, val interface{}) error {
 	}
 
 	return fmt.Errorf("type mismatch, expected bool")
+}
+
+func makeSchema(fieldNames []string, fieldTypes []arrow.DataType) *arrow.Schema {
+	fields := make([]arrow.Field, len(fieldTypes))
+	for i, dataType := range fieldTypes {
+		fields[i] = arrow.Field{Name: fieldNames[i], Type: dataType}
+	}
+
+	schema := arrow.NewSchema(fields, nil)
+
+	schema.Fields()
+
+	return schema
+}
+
+func makeBuilders(schema *arrow.Schema, pool *memory.GoAllocator) ([]array.Builder, []func(array.Builder, interface{}) error, error) {
+	builders := make([]array.Builder, schema.NumFields())
+	appendFuncs := make([]func(array.Builder, interface{}) error, schema.NumFields())
+
+	for i, field := range schema.Fields() {
+		switch field.Type {
+		case arrow.PrimitiveTypes.Uint16:
+			builders[i] = array.NewUint16Builder(pool)
+			appendFuncs[i] = appendUint16
+		case arrow.PrimitiveTypes.Uint32:
+			builders[i] = array.NewUint32Builder(pool)
+			appendFuncs[i] = appendUint32
+		case arrow.PrimitiveTypes.Uint64:
+			builders[i] = array.NewUint64Builder(pool)
+			appendFuncs[i] = appendUint64
+		case arrow.PrimitiveTypes.Int16:
+			builders[i] = array.NewInt16Builder(pool)
+			appendFuncs[i] = appendInt16
+		case arrow.PrimitiveTypes.Int32:
+			builders[i] = array.NewInt32Builder(pool)
+			appendFuncs[i] = appendInt32
+		case arrow.PrimitiveTypes.Int64:
+			builders[i] = array.NewInt64Builder(pool)
+			appendFuncs[i] = appendInt64
+		case arrow.PrimitiveTypes.Float32:
+			builders[i] = array.NewFloat32Builder(pool)
+			appendFuncs[i] = appendFloat32
+		case arrow.PrimitiveTypes.Float64:
+			builders[i] = array.NewFloat64Builder(pool)
+			appendFuncs[i] = appendFloat64
+		case arrow.BinaryTypes.String:
+			builders[i] = array.NewStringBuilder(pool)
+			appendFuncs[i] = appendString
+		case arrow.FixedWidthTypes.Boolean:
+			builders[i] = array.NewBooleanBuilder(pool)
+			appendFuncs[i] = appendBool
+		default:
+			return nil, nil, fmt.Errorf("unsupported data type: %s", field.Type)
+		}
+	}
+	return builders, appendFuncs, nil
 }

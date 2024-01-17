@@ -85,8 +85,13 @@ func TestArrowWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	builder, err := NewArrowRowBuilder(writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, row := range rows {
-		if err := writer.Write(row); err != nil {
+		if err := builder.WriteRow(row); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -95,34 +100,62 @@ func TestArrowWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := builder.Release(); err != nil {
+		t.Fatal(err)
+	}
+
 	readAndVerifyArrowFile(filePath, batchSize, rows)
 }
 
 func TestArrowWriterConcurrency(t *testing.T) {
+	filePath := "concurrent_output.feather"
 	fieldNames := []string{"Field1", "Field2"}
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
-	writer, err := NewArrowWriter("concurrent_output.feather", fieldNames, fieldTypes, 10)
+	batchSize := 10
+
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, batchSize)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer writer.Close()
 
 	var wg sync.WaitGroup
+
 	numGoroutines := 5
 	numWritesPerRoutine := 10
+
+	rows := make([][]interface{}, numGoroutines*numWritesPerRoutine)
+	for i := 0; i < numGoroutines; i++ {
+		for j := 0; j < numWritesPerRoutine; j++ {
+			rows[i*numWritesPerRoutine+j] = []interface{}{uint16(i), uint16(j)}
+		}
+	}
 
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(writer *ArrowWriter, routineID int) {
+			builder, err := NewArrowRowBuilder(writer)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			defer wg.Done()
 			for j := 0; j < numWritesPerRoutine; j++ {
-				row := []interface{}{uint16(routineID), uint16(j)}
-				if err := writer.Write(row); err != nil {
-					t.Error(err)
+				if err := builder.WriteRow(rows[routineID*numWritesPerRoutine+j]); err != nil {
+					t.Fatal(err)
 				}
+			}
+
+			if err := builder.Release(); err != nil {
+				t.Fatal(err)
 			}
 		}(writer, i)
 	}
 
 	wg.Wait()
+
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	readAndVerifyArrowFile(filePath, batchSize, rows)
 }
