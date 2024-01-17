@@ -24,7 +24,6 @@ type ArrowWriter struct {
 // This writing operation is threadsafe.
 func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType) (*ArrowWriter, error) {
 	schema := makeSchema(fieldNames, fieldTypes)
-
 	file, err := os.Create(filePath)
 	if err != nil {
 		return nil, err
@@ -111,7 +110,11 @@ func (arb *ArrowRowBuilder) WriteRow(row []interface{}) error {
 	arb.numRowsInChunk++
 
 	if arb.numRowsInChunk == arb.chunkSize {
-		arb.writeChunk()
+		err := arb.writeChunk()
+		if err != nil {
+			return err
+		}
+
 		arb.numRowsInChunk = 0
 	}
 
@@ -128,6 +131,10 @@ func (arb *ArrowRowBuilder) writeChunk() error {
 
 	record := array.NewRecord(arb.arrowWriter.schema, cols, int64(arb.numRowsInChunk))
 	defer record.Release()
+
+	if err := arb.arrowWriter.writeChunk(record); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -153,7 +160,7 @@ func (arb *ArrowRowBuilder) Release() error {
 
 func appendUint8(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Uint8Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -166,7 +173,7 @@ func appendUint8(builder array.Builder, val interface{}) error {
 
 func appendUint16(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Uint16Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -179,7 +186,7 @@ func appendUint16(builder array.Builder, val interface{}) error {
 
 func appendUint32(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Uint32Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -192,7 +199,7 @@ func appendUint32(builder array.Builder, val interface{}) error {
 
 func appendUint64(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Uint64Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -205,7 +212,7 @@ func appendUint64(builder array.Builder, val interface{}) error {
 
 func appendInt8(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Int8Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -219,7 +226,7 @@ func appendInt8(builder array.Builder, val interface{}) error {
 
 func appendInt16(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Int16Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -233,7 +240,7 @@ func appendInt16(builder array.Builder, val interface{}) error {
 
 func appendInt32(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Int32Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -247,7 +254,7 @@ func appendInt32(builder array.Builder, val interface{}) error {
 
 func appendInt64(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Int64Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -261,7 +268,7 @@ func appendInt64(builder array.Builder, val interface{}) error {
 
 func appendFloat32(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Float32Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -275,7 +282,7 @@ func appendFloat32(builder array.Builder, val interface{}) error {
 
 func appendFloat64(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.Float64Builder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -289,7 +296,7 @@ func appendFloat64(builder array.Builder, val interface{}) error {
 
 func appendString(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.StringBuilder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -303,7 +310,7 @@ func appendString(builder array.Builder, val interface{}) error {
 
 func appendBool(builder array.Builder, val interface{}) error {
 	if val == nil {
-		builder.(*array.BooleanBuilder).AppendNull()
+		builder.AppendNull()
 		return nil
 	}
 
@@ -318,12 +325,10 @@ func appendBool(builder array.Builder, val interface{}) error {
 func makeSchema(fieldNames []string, fieldTypes []arrow.DataType) *arrow.Schema {
 	fields := make([]arrow.Field, len(fieldTypes))
 	for i, dataType := range fieldTypes {
-		fields[i] = arrow.Field{Name: fieldNames[i], Type: dataType}
+		fields[i] = arrow.Field{Name: fieldNames[i], Type: dataType, Nullable: true}
 	}
 
 	schema := arrow.NewSchema(fields, nil)
-
-	schema.Fields()
 
 	return schema
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 
@@ -13,58 +14,126 @@ import (
 	"github.com/apache/arrow/go/v14/arrow/ipc"
 )
 
-func readAndVerifyArrowFile(filePath string, batchSize int, rows [][]interface{}) {
+func sortRows(rows [][]interface{}) {
+	sort.Slice(rows, func(i, j int) bool {
+		for col := 0; col < len(rows[i]); col++ {
+			switch val1 := rows[i][col].(type) {
+			case uint16:
+				val2 := rows[j][col].(uint16)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case int, int8, int16, int32, int64, uint, uint8, uint32, uint64, float32, float64:
+				val2 := rows[j][col]
+				return fmt.Sprint(val1) < fmt.Sprint(val2) // Fallback for other numeric types
+			case string:
+				val2, _ := rows[j][col].(string)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case bool:
+				val2, _ := rows[j][col].(bool)
+				if val1 != val2 {
+					return !val1 && val2 // false < true
+				}
+			}
+		}
+		return false
+	})
+}
+
+func readArrowRows(filePath string) ([][]interface{}, error) {
 	// Open the file for reading
 	file, err := os.Open(filePath)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	defer file.Close()
 
 	// Create a new IPC reader
 	reader, err := ipc.NewFileReader(file)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	defer reader.Close()
-	defer os.Remove(filePath)
+
+	var readRows [][]interface{}
 
 	for i := 0; i < reader.NumRecords(); i++ {
 		record, err := reader.Record(i)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 
-		for colIdx, col := range record.Columns() {
-			for rowIdx := 0; rowIdx < batchSize; rowIdx++ {
-				originalIdx := batchSize*i + rowIdx
-				if originalIdx >= len(rows) {
-					break
+		for rowIdx := 0; rowIdx < int(record.NumRows()); rowIdx++ {
+			var row []interface{}
+			for _, col := range record.Columns() {
+				if col.Len() <= rowIdx {
+					return nil, fmt.Errorf("column length (%d) is less than row index (%d)", col.Len(), rowIdx)
 				}
 
-				expectedValue := rows[originalIdx][colIdx]
-				var foundValue interface{}
+				if col.IsNull(rowIdx) {
+					row = append(row, nil)
+					continue
+				}
 
+				var foundValue interface{}
 				switch v := col.(type) {
+				case *array.Uint8:
+					foundValue = v.Value(rowIdx)
 				case *array.Uint16:
-					if v.Len() <= rowIdx {
-						log.Fatal("Uint16 column length does not match number of rows")
-					}
+					foundValue = v.Value(rowIdx)
+				case *array.Uint32:
+					foundValue = v.Value(rowIdx)
+				case *array.Uint64:
+					foundValue = v.Value(rowIdx)
+				case *array.Int8:
+					foundValue = v.Value(rowIdx)
+				case *array.Int16:
+					foundValue = v.Value(rowIdx)
+				case *array.Int32:
+					foundValue = v.Value(rowIdx)
+				case *array.Int64:
+					foundValue = v.Value(rowIdx)
+				case *array.Float16:
+					foundValue = v.Value(rowIdx)
+				case *array.Float32:
 					foundValue = v.Value(rowIdx)
 				case *array.Float64:
-					if v.Len() <= rowIdx {
-						log.Fatal("Float64 column length does not match number of rows")
-					}
 					foundValue = v.Value(rowIdx)
-				// Add cases for other types as needed
+				case *array.String:
+					foundValue = v.Value(rowIdx)
+				case *array.Boolean:
+					foundValue = v.Value(rowIdx)
 				default:
-					log.Fatalf("Unsupported column type: %v", reflect.TypeOf(col))
+					return nil, fmt.Errorf("unsupported data type: %s", col.DataType())
 				}
 
-				if !reflect.DeepEqual(foundValue, expectedValue) {
-					log.Fatalf("Value in column does not match value in row: found %v, expected %v", foundValue, expectedValue)
-				}
+				row = append(row, foundValue)
 			}
+
+			readRows = append(readRows, row)
+		}
+	}
+
+	return readRows, nil
+}
+
+func readAndVerifyArrowFile(filePath string, expectedRows [][]interface{}, sort bool) {
+	readRows, err := readArrowRows(filePath)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if sort {
+		sortRows(readRows)
+		sortRows(expectedRows)
+	}
+
+	for i, row := range readRows {
+		if !reflect.DeepEqual(row, expectedRows[i]) {
+			log.Fatalf("Mismatch at row %d: got %v, want %v", i, row, expectedRows[i])
 		}
 	}
 }
@@ -97,15 +166,15 @@ func TestArrowWriteRead(t *testing.T) {
 		}
 	}
 
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := builder.Release(); err != nil {
 		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, batchSize, rows)
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	readAndVerifyArrowFile(filePath, rows, false)
 }
 
 func TestArrowWriterHandlesNullValues(t *testing.T) {
@@ -113,13 +182,12 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint8, arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint32, arrow.PrimitiveTypes.Uint64,
 		arrow.PrimitiveTypes.Int8, arrow.PrimitiveTypes.Int16, arrow.PrimitiveTypes.Int32, arrow.PrimitiveTypes.Int64,
 		arrow.PrimitiveTypes.Float32, arrow.PrimitiveTypes.Float64, arrow.BinaryTypes.String, arrow.FixedWidthTypes.Boolean}
-	batchSize := 10
+	batchSize := 100
 
 	rows := make([][]interface{}, len(fieldTypes))
 	fieldNames := make([]string, len(fieldTypes))
 	for i := range rows {
 		rows[i] = []interface{}{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
-
 		switch fieldTypes[i] {
 		case arrow.PrimitiveTypes.Uint8:
 			rows[i][i] = uint8(i)
@@ -165,22 +233,21 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 		}
 	}
 
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := builder.Release(); err != nil {
 		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, batchSize, rows)
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	readAndVerifyArrowFile(filePath, rows, false)
 }
 
 func TestArrowWriterConcurrency(t *testing.T) {
 	filePath := "concurrent_output.feather"
 	fieldNames := []string{"Field1", "Field2"}
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
-	batchSize := 10
 
 	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
 	if err != nil {
@@ -210,7 +277,9 @@ func TestArrowWriterConcurrency(t *testing.T) {
 
 			defer wg.Done()
 			for j := 0; j < numWritesPerRoutine; j++ {
-				if err := builder.WriteRow(rows[routineID*numWritesPerRoutine+j]); err != nil {
+				rowToWrite := rows[routineID*numWritesPerRoutine+j]
+
+				if err := builder.WriteRow(rowToWrite); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -227,5 +296,5 @@ func TestArrowWriterConcurrency(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, batchSize, rows)
+	readAndVerifyArrowFile(filePath, rows, true)
 }
