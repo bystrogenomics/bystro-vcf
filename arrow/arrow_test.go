@@ -17,15 +17,77 @@ import (
 func sortRows(rows [][]interface{}) {
 	sort.Slice(rows, func(i, j int) bool {
 		for col := 0; col < len(rows[i]); col++ {
+			val1 := rows[i][col]
+			val2 := rows[j][col]
+			if val1 == nil || val2 == nil {
+				if (val1 == nil && val2 == nil) || val1 != nil {
+					return false
+				}
+
+				return true
+			}
+
 			switch val1 := rows[i][col].(type) {
+			case int:
+				val2 := rows[j][col].(int)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case int8:
+				val2 := rows[j][col].(int8)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case int16:
+				val2 := rows[j][col].(int16)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case int32:
+				val2 := rows[j][col].(int32)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case int64:
+				val2 := rows[j][col].(int64)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case uint:
+				val2 := rows[j][col].(uint)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case uint8:
+				val2 := rows[j][col].(uint8)
+				if val1 != val2 {
+					return val1 < val2
+				}
 			case uint16:
 				val2 := rows[j][col].(uint16)
 				if val1 != val2 {
 					return val1 < val2
 				}
-			case int, int8, int16, int32, int64, uint, uint8, uint32, uint64, float32, float64:
-				val2 := rows[j][col]
-				return fmt.Sprint(val1) < fmt.Sprint(val2) // Fallback for other numeric types
+			case uint32:
+				val2 := rows[j][col].(uint32)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case uint64:
+				val2 := rows[j][col].(uint64)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case float32:
+				val2 := rows[j][col].(float32)
+				if val1 != val2 {
+					return val1 < val2
+				}
+			case float64:
+				val2 := rows[j][col].(float64)
+				if val1 != val2 {
+					return val1 < val2
+				}
 			case string:
 				val2, _ := rows[j][col].(string)
 				if val1 != val2 {
@@ -34,7 +96,7 @@ func sortRows(rows [][]interface{}) {
 			case bool:
 				val2, _ := rows[j][col].(bool)
 				if val1 != val2 {
-					return !val1 && val2 // false < true
+					return !val1 && val2
 				}
 			}
 		}
