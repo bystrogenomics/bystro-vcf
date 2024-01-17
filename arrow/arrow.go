@@ -12,14 +12,17 @@ import (
 )
 
 type ArrowWriter struct {
-	filePath  string
-	schema    *arrow.Schema
-	writer    *ipc.FileWriter
-	chunkSize int
-	mu        sync.Mutex
+	filePath string
+	schema   *arrow.Schema
+	writer   *ipc.FileWriter
+	mu       sync.Mutex
 }
 
-func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType, chunkSize int) (*ArrowWriter, error) {
+// Create a new ArrowWriter. The number of fields in fieldNames and fieldTypes
+// must match. The number of rows in each chunk is determined by chunkSize.
+// The ArrowWriter will write to filePath.
+// This writing operation is threadsafe.
+func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType) (*ArrowWriter, error) {
 	schema := makeSchema(fieldNames, fieldTypes)
 
 	file, err := os.Create(filePath)
@@ -33,10 +36,9 @@ func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.Dat
 	}
 
 	return &ArrowWriter{
-		filePath:  filePath,
-		schema:    schema,
-		writer:    writer,
-		chunkSize: chunkSize,
+		filePath: filePath,
+		schema:   schema,
+		writer:   writer,
 	}, nil
 }
 
@@ -51,6 +53,8 @@ func (aw *ArrowWriter) writeChunk(record arrow.Record) error {
 	return nil
 }
 
+// Close closes the ArrowWriter. This must be called to ensure that all data is
+// successfully written to the file.
 func (aw *ArrowWriter) Close() error {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
@@ -64,9 +68,16 @@ type ArrowRowBuilder struct {
 	pool           *memory.GoAllocator
 	arrowWriter    *ArrowWriter
 	numRowsInChunk int
+	chunkSize      int
 }
 
-func NewArrowRowBuilder(aw *ArrowWriter) (*ArrowRowBuilder, error) {
+// NewArrowRowBuilder creates a new ArrowRowBuilder. The ArrowRowBuilder will
+// write to the underlying ArrowWriter.
+// ArrowRowBuilder is not threadsafe: it should only be used by one thread at a
+// time, though multiple ArrowRowBuilders writing to a single ArrowWriter concurrently is possible
+// This is done to enable fast, parallel accumulation of rows, delaying synchronization until enough rows are accumulated
+// to write a chunk.
+func NewArrowRowBuilder(aw *ArrowWriter, chunkSize int) (*ArrowRowBuilder, error) {
 	pool := memory.NewGoAllocator()
 	builders, appendFuncs, err := makeBuilders(aw.schema, pool)
 
@@ -80,9 +91,12 @@ func NewArrowRowBuilder(aw *ArrowWriter) (*ArrowRowBuilder, error) {
 		pool:           pool,
 		arrowWriter:    aw,
 		numRowsInChunk: 0,
+		chunkSize:      chunkSize,
 	}, nil
 }
 
+// WriteRow writes a row to the ArrowRowBuilder. The number of fields in the row
+// must match the number of fields in the schema.
 func (arb *ArrowRowBuilder) WriteRow(row []interface{}) error {
 	if len(row) != len(arb.builders) {
 		return fmt.Errorf("mismatch in number of fields: expected %d, got %d", len(arb.builders), len(row))
@@ -96,7 +110,7 @@ func (arb *ArrowRowBuilder) WriteRow(row []interface{}) error {
 
 	arb.numRowsInChunk++
 
-	if arb.numRowsInChunk == arb.arrowWriter.chunkSize {
+	if arb.numRowsInChunk == arb.chunkSize {
 		arb.writeChunk()
 		arb.numRowsInChunk = 0
 	}
@@ -118,6 +132,8 @@ func (arb *ArrowRowBuilder) writeChunk() error {
 	return nil
 }
 
+// Release releases the ArrowRowBuilder. This must be called to ensure that all
+// data is successfully written to the file.
 func (arb *ArrowRowBuilder) Release() error {
 	if arb.numRowsInChunk > 0 {
 		err := arb.writeChunk()
@@ -135,7 +151,25 @@ func (arb *ArrowRowBuilder) Release() error {
 	return nil
 }
 
+func appendUint8(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Uint8Builder).AppendNull()
+		return nil
+	}
+
+	if v, ok := val.(uint8); ok {
+		builder.(*array.Uint8Builder).Append(v)
+		return nil
+	}
+	return fmt.Errorf("type mismatch, expected uint8")
+}
+
 func appendUint16(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Uint16Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(uint16); ok {
 		builder.(*array.Uint16Builder).Append(v)
 		return nil
@@ -144,6 +178,11 @@ func appendUint16(builder array.Builder, val interface{}) error {
 }
 
 func appendUint32(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Uint32Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(uint32); ok {
 		builder.(*array.Uint32Builder).Append(v)
 		return nil
@@ -152,6 +191,11 @@ func appendUint32(builder array.Builder, val interface{}) error {
 }
 
 func appendUint64(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Uint64Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(uint64); ok {
 		builder.(*array.Uint64Builder).Append(v)
 		return nil
@@ -159,7 +203,26 @@ func appendUint64(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected uint64")
 }
 
+func appendInt8(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Int8Builder).AppendNull()
+		return nil
+	}
+
+	if v, ok := val.(int8); ok {
+		builder.(*array.Int8Builder).Append(v)
+		return nil
+	}
+
+	return fmt.Errorf("type mismatch, expected int8")
+}
+
 func appendInt16(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Int16Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(int16); ok {
 		builder.(*array.Int16Builder).Append(v)
 		return nil
@@ -169,6 +232,11 @@ func appendInt16(builder array.Builder, val interface{}) error {
 }
 
 func appendInt32(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Int32Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(int32); ok {
 		builder.(*array.Int32Builder).Append(v)
 		return nil
@@ -178,6 +246,11 @@ func appendInt32(builder array.Builder, val interface{}) error {
 }
 
 func appendInt64(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Int64Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(int64); ok {
 		builder.(*array.Int64Builder).Append(v)
 		return nil
@@ -187,6 +260,11 @@ func appendInt64(builder array.Builder, val interface{}) error {
 }
 
 func appendFloat32(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Float32Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(float32); ok {
 		builder.(*array.Float32Builder).Append(v)
 		return nil
@@ -196,6 +274,11 @@ func appendFloat32(builder array.Builder, val interface{}) error {
 }
 
 func appendFloat64(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.Float64Builder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(float64); ok {
 		builder.(*array.Float64Builder).Append(v)
 		return nil
@@ -205,6 +288,11 @@ func appendFloat64(builder array.Builder, val interface{}) error {
 }
 
 func appendString(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.StringBuilder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(string); ok {
 		builder.(*array.StringBuilder).Append(v)
 		return nil
@@ -214,6 +302,11 @@ func appendString(builder array.Builder, val interface{}) error {
 }
 
 func appendBool(builder array.Builder, val interface{}) error {
+	if val == nil {
+		builder.(*array.BooleanBuilder).AppendNull()
+		return nil
+	}
+
 	if v, ok := val.(bool); ok {
 		builder.(*array.BooleanBuilder).Append(v)
 		return nil
@@ -241,6 +334,9 @@ func makeBuilders(schema *arrow.Schema, pool *memory.GoAllocator) ([]array.Build
 
 	for i, field := range schema.Fields() {
 		switch field.Type {
+		case arrow.PrimitiveTypes.Uint8:
+			builders[i] = array.NewUint8Builder(pool)
+			appendFuncs[i] = appendUint8
 		case arrow.PrimitiveTypes.Uint16:
 			builders[i] = array.NewUint16Builder(pool)
 			appendFuncs[i] = appendUint16
@@ -250,6 +346,9 @@ func makeBuilders(schema *arrow.Schema, pool *memory.GoAllocator) ([]array.Build
 		case arrow.PrimitiveTypes.Uint64:
 			builders[i] = array.NewUint64Builder(pool)
 			appendFuncs[i] = appendUint64
+		case arrow.PrimitiveTypes.Int8:
+			builders[i] = array.NewInt8Builder(pool)
+			appendFuncs[i] = appendInt8
 		case arrow.PrimitiveTypes.Int16:
 			builders[i] = array.NewInt16Builder(pool)
 			appendFuncs[i] = appendInt16

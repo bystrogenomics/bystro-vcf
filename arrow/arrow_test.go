@@ -1,6 +1,7 @@
 package arrow
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -80,12 +81,80 @@ func TestArrowWriteRead(t *testing.T) {
 		rows[i] = []interface{}{uint16(i), uint16(i + 1), uint16(i + 2)}
 	}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, batchSize)
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	builder, err := NewArrowRowBuilder(writer)
+	builder, err := NewArrowRowBuilder(writer, batchSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, row := range rows {
+		if err := builder.WriteRow(row); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := builder.Release(); err != nil {
+		t.Fatal(err)
+	}
+
+	readAndVerifyArrowFile(filePath, batchSize, rows)
+}
+
+func TestArrowWriterHandlesNullValues(t *testing.T) {
+	filePath := "null_values.feather"
+	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint8, arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint32, arrow.PrimitiveTypes.Uint64,
+		arrow.PrimitiveTypes.Int8, arrow.PrimitiveTypes.Int16, arrow.PrimitiveTypes.Int32, arrow.PrimitiveTypes.Int64,
+		arrow.PrimitiveTypes.Float32, arrow.PrimitiveTypes.Float64, arrow.BinaryTypes.String, arrow.FixedWidthTypes.Boolean}
+	batchSize := 10
+
+	rows := make([][]interface{}, len(fieldTypes))
+	fieldNames := make([]string, len(fieldTypes))
+	for i := range rows {
+		rows[i] = []interface{}{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
+
+		switch fieldTypes[i] {
+		case arrow.PrimitiveTypes.Uint8:
+			rows[i][i] = uint8(i)
+		case arrow.PrimitiveTypes.Uint16:
+			rows[i][i] = uint16(i)
+		case arrow.PrimitiveTypes.Uint32:
+			rows[i][i] = uint32(i)
+		case arrow.PrimitiveTypes.Uint64:
+			rows[i][i] = uint64(i)
+		case arrow.PrimitiveTypes.Int8:
+			rows[i][i] = int8(i)
+		case arrow.PrimitiveTypes.Int16:
+			rows[i][i] = int16(i)
+		case arrow.PrimitiveTypes.Int32:
+			rows[i][i] = int32(i)
+		case arrow.PrimitiveTypes.Int64:
+			rows[i][i] = int64(i)
+		case arrow.PrimitiveTypes.Float32:
+			rows[i][i] = float32(i)
+		case arrow.PrimitiveTypes.Float64:
+			rows[i][i] = float64(i)
+		case arrow.BinaryTypes.String:
+			rows[i][i] = fmt.Sprintf("Field %d", i)
+		case arrow.FixedWidthTypes.Boolean:
+			rows[i][i] = true
+		}
+		fieldNames[i] = fmt.Sprintf("Field %d", i)
+	}
+
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	builder, err := NewArrowRowBuilder(writer, batchSize)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +182,7 @@ func TestArrowWriterConcurrency(t *testing.T) {
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
 	batchSize := 10
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, batchSize)
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +202,8 @@ func TestArrowWriterConcurrency(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(writer *ArrowWriter, routineID int) {
-			builder, err := NewArrowRowBuilder(writer)
+			batchSize := 1 + routineID%10
+			builder, err := NewArrowRowBuilder(writer, batchSize)
 			if err != nil {
 				t.Fatal(err)
 			}
