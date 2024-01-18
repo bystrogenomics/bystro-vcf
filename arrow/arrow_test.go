@@ -53,6 +53,8 @@ func compareInterface(a, b any) bool {
 		return av.Float() < bv.Float()
 	case reflect.String:
 		return av.String() < bv.String()
+	case reflect.Bool:
+		return !av.Bool() && bv.Bool()
 	default:
 		panic("unsupported type")
 	}
