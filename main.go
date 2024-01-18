@@ -58,21 +58,20 @@ const zeroByte = byte('0')
 const precision = 3
 
 type Config struct {
-	inPath             string
-	outPath            string
-	genotypeDosagePath string
-	sampleListPath     string
-	famPath            string
-	errPath            string
-	emptyField         string
-	fieldDelimiter     string
-	keepID             bool
-	keepInfo           bool
-	keepQual           bool
-	keepPos            bool
-	cpuProfile         string
-	allowedFilters     map[string]bool
-	excludedFilters    map[string]bool
+	inPath          string
+	outPath         string
+	sampleListPath  string
+	famPath         string
+	errPath         string
+	emptyField      string
+	fieldDelimiter  string
+	keepID          bool
+	keepInfo        bool
+	keepQual        bool
+	keepPos         bool
+	cpuProfile      string
+	allowedFilters  map[string]bool
+	excludedFilters map[string]bool
 }
 
 func setup(args []string) *Config {
@@ -81,7 +80,6 @@ func setup(args []string) *Config {
 	flag.StringVar(&config.famPath, "fam", "", "The fam file path (optional)")
 	flag.StringVar(&config.errPath, "err", "", "The log path (optional: default stderr)")
 	flag.StringVar(&config.outPath, "out", "", "The output path (optional: default stdout")
-	flag.StringVar(&config.genotypeDosagePath, "genotypeDosage", "", "The output path for the genotype dosage (optional)")
 	flag.StringVar(&config.sampleListPath, "sample", "", "The output path of the sample list (optional: default stdout")
 	flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
 	flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
@@ -155,20 +153,6 @@ func main() {
 		var err error
 
 		outFh, err = os.OpenFile(config.outPath, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		outFh = os.Stdout
-	}
-
-	defer outFh.Close()
-
-	dosageFh := (*os.File)(nil)
-	if config.genotypeDosagePath != "" {
-		var err error
-
-		outFh, err = os.OpenFile(config.genotypeDosagePath, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			log.Fatal(err)
 		}
