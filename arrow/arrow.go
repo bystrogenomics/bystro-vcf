@@ -63,7 +63,7 @@ func (aw *ArrowWriter) Close() error {
 
 type ArrowRowBuilder struct {
 	builders       []array.Builder
-	appendFuncs    []func(array.Builder, interface{}) error
+	appendFuncs    []func(array.Builder, any) error
 	pool           *memory.GoAllocator
 	arrowWriter    *ArrowWriter
 	numRowsInChunk int
@@ -96,7 +96,7 @@ func NewArrowRowBuilder(aw *ArrowWriter, chunkSize int) (*ArrowRowBuilder, error
 
 // WriteRow writes a row to the ArrowRowBuilder. The number of fields in the row
 // must match the number of fields in the schema.
-func (arb *ArrowRowBuilder) WriteRow(row []interface{}) error {
+func (arb *ArrowRowBuilder) WriteRow(row []any) error {
 	if len(row) != len(arb.builders) {
 		return fmt.Errorf("mismatch in number of fields: expected %d, got %d", len(arb.builders), len(row))
 	}
@@ -160,7 +160,7 @@ func (arb *ArrowRowBuilder) Release() error {
 	return nil
 }
 
-func appendUint8(builder array.Builder, val interface{}) error {
+func appendUint8(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -173,7 +173,7 @@ func appendUint8(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected uint8")
 }
 
-func appendUint16(builder array.Builder, val interface{}) error {
+func appendUint16(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -186,7 +186,7 @@ func appendUint16(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected uint16")
 }
 
-func appendUint32(builder array.Builder, val interface{}) error {
+func appendUint32(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -199,7 +199,7 @@ func appendUint32(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected uint32")
 }
 
-func appendUint64(builder array.Builder, val interface{}) error {
+func appendUint64(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -212,7 +212,7 @@ func appendUint64(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected uint64")
 }
 
-func appendInt8(builder array.Builder, val interface{}) error {
+func appendInt8(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -226,7 +226,7 @@ func appendInt8(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected int8")
 }
 
-func appendInt16(builder array.Builder, val interface{}) error {
+func appendInt16(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -240,7 +240,7 @@ func appendInt16(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected int16")
 }
 
-func appendInt32(builder array.Builder, val interface{}) error {
+func appendInt32(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -254,7 +254,7 @@ func appendInt32(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected int32")
 }
 
-func appendInt64(builder array.Builder, val interface{}) error {
+func appendInt64(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -268,7 +268,7 @@ func appendInt64(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected int64")
 }
 
-func appendFloat32(builder array.Builder, val interface{}) error {
+func appendFloat32(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -282,7 +282,7 @@ func appendFloat32(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected float32")
 }
 
-func appendFloat64(builder array.Builder, val interface{}) error {
+func appendFloat64(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -296,7 +296,7 @@ func appendFloat64(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected float64")
 }
 
-func appendString(builder array.Builder, val interface{}) error {
+func appendString(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -310,7 +310,7 @@ func appendString(builder array.Builder, val interface{}) error {
 	return fmt.Errorf("type mismatch, expected string")
 }
 
-func appendBool(builder array.Builder, val interface{}) error {
+func appendBool(builder array.Builder, val any) error {
 	if val == nil {
 		builder.AppendNull()
 		return nil
@@ -335,9 +335,9 @@ func makeSchema(fieldNames []string, fieldTypes []arrow.DataType) *arrow.Schema 
 	return schema
 }
 
-func makeBuilders(schema *arrow.Schema, pool *memory.GoAllocator) ([]array.Builder, []func(array.Builder, interface{}) error, error) {
+func makeBuilders(schema *arrow.Schema, pool *memory.GoAllocator) ([]array.Builder, []func(array.Builder, any) error, error) {
 	builders := make([]array.Builder, schema.NumFields())
-	appendFuncs := make([]func(array.Builder, interface{}) error, schema.NumFields())
+	appendFuncs := make([]func(array.Builder, any) error, schema.NumFields())
 
 	for i, field := range schema.Fields() {
 		switch field.Type {

@@ -6,6 +6,7 @@ require (
 	github.com/akotlar/bystro-utils v0.0.0-20180921004542-b5183a523f20
 	github.com/apache/arrow/go/v14 v14.0.2
 	github.com/stretchr/testify v1.8.4
+	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
 
 require (

@@ -14,97 +14,51 @@ import (
 	"github.com/apache/arrow/go/v14/arrow/ipc"
 )
 
-func sortRows(rows [][]interface{}) {
+// sortRows sorts a slice of slices of any.
+func sortRows(rows [][]any) {
 	sort.Slice(rows, func(i, j int) bool {
-		for col := 0; col < len(rows[i]); col++ {
-			val1 := rows[i][col]
-			val2 := rows[j][col]
-			if val1 == nil || val2 == nil {
-				if (val1 == nil && val2 == nil) || val1 != nil {
-					return false
-				}
-
+		for col := 0; col < len(rows[i]) && col < len(rows[j]); col++ {
+			if compareInterface(rows[i][col], rows[j][col]) {
 				return true
-			}
-
-			switch val1 := rows[i][col].(type) {
-			case int:
-				val2 := rows[j][col].(int)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case int8:
-				val2 := rows[j][col].(int8)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case int16:
-				val2 := rows[j][col].(int16)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case int32:
-				val2 := rows[j][col].(int32)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case int64:
-				val2 := rows[j][col].(int64)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case uint:
-				val2 := rows[j][col].(uint)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case uint8:
-				val2 := rows[j][col].(uint8)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case uint16:
-				val2 := rows[j][col].(uint16)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case uint32:
-				val2 := rows[j][col].(uint32)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case uint64:
-				val2 := rows[j][col].(uint64)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case float32:
-				val2 := rows[j][col].(float32)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case float64:
-				val2 := rows[j][col].(float64)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case string:
-				val2, _ := rows[j][col].(string)
-				if val1 != val2 {
-					return val1 < val2
-				}
-			case bool:
-				val2, _ := rows[j][col].(bool)
-				if val1 != val2 {
-					return !val1 && val2
-				}
+			} else if compareInterface(rows[j][col], rows[i][col]) {
+				return false
 			}
 		}
 		return false
 	})
 }
 
-func readArrowRows(filePath string) ([][]interface{}, error) {
+// compareInterface compares two any values and returns true if the first is less than the second.
+func compareInterface(a, b any) bool {
+	// Handle nil values
+	if a == nil || b == nil {
+		return a == nil && b != nil
+	}
+
+	// Use reflection to compare values
+	av := reflect.ValueOf(a)
+	bv := reflect.ValueOf(b)
+
+	// Ensure types are comparable
+	if av.Type() != bv.Type() {
+		panic("mismatched types")
+	}
+
+	switch av.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return av.Int() < bv.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return av.Uint() < bv.Uint()
+	case reflect.Float32, reflect.Float64:
+		return av.Float() < bv.Float()
+	case reflect.String:
+		return av.String() < bv.String()
+	default:
+		panic("unsupported type")
+	}
+}
+
+func readArrowRows(filePath string) ([][]any, error) {
 	// Open the file for reading
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -119,7 +73,7 @@ func readArrowRows(filePath string) ([][]interface{}, error) {
 	}
 	defer reader.Close()
 
-	var readRows [][]interface{}
+	var readRows [][]any
 
 	for i := 0; i < reader.NumRecords(); i++ {
 		record, err := reader.Record(i)
@@ -128,7 +82,7 @@ func readArrowRows(filePath string) ([][]interface{}, error) {
 		}
 
 		for rowIdx := 0; rowIdx < int(record.NumRows()); rowIdx++ {
-			var row []interface{}
+			var row []any
 			for _, col := range record.Columns() {
 				if col.Len() <= rowIdx {
 					return nil, fmt.Errorf("column length (%d) is less than row index (%d)", col.Len(), rowIdx)
@@ -139,7 +93,7 @@ func readArrowRows(filePath string) ([][]interface{}, error) {
 					continue
 				}
 
-				var foundValue interface{}
+				var foundValue any
 				switch v := col.(type) {
 				case *array.Uint8:
 					foundValue = v.Value(rowIdx)
@@ -181,7 +135,7 @@ func readArrowRows(filePath string) ([][]interface{}, error) {
 	return readRows, nil
 }
 
-func readAndVerifyArrowFile(filePath string, expectedRows [][]interface{}, sort bool) {
+func readAndVerifyArrowFile(filePath string, expectedRows [][]any, sort bool) {
 	readRows, err := readArrowRows(filePath)
 
 	if err != nil {
@@ -207,9 +161,9 @@ func TestArrowWriteRead(t *testing.T) {
 	// Define the data types for the fields
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
 	fieldNames := []string{"Field1", "Field2", "Field3"}
-	rows := make([][]interface{}, 100)
+	rows := make([][]any, 100)
 	for i := range rows {
-		rows[i] = []interface{}{uint16(i), uint16(i + 1), uint16(i + 2)}
+		rows[i] = []any{uint16(i), uint16(i + 1), uint16(i + 2)}
 	}
 
 	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
@@ -246,10 +200,10 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 		arrow.PrimitiveTypes.Float32, arrow.PrimitiveTypes.Float64, arrow.BinaryTypes.String, arrow.FixedWidthTypes.Boolean}
 	batchSize := 100
 
-	rows := make([][]interface{}, len(fieldTypes))
+	rows := make([][]any, len(fieldTypes))
 	fieldNames := make([]string, len(fieldTypes))
 	for i := range rows {
-		rows[i] = []interface{}{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
+		rows[i] = []any{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
 		switch fieldTypes[i] {
 		case arrow.PrimitiveTypes.Uint8:
 			rows[i][i] = uint8(i)
@@ -321,10 +275,10 @@ func TestArrowWriterConcurrency(t *testing.T) {
 	numGoroutines := 5
 	numWritesPerRoutine := 10
 
-	rows := make([][]interface{}, numGoroutines*numWritesPerRoutine)
+	rows := make([][]any, numGoroutines*numWritesPerRoutine)
 	for i := 0; i < numGoroutines; i++ {
 		for j := 0; j < numWritesPerRoutine; j++ {
-			rows[i*numWritesPerRoutine+j] = []interface{}{uint16(i), uint16(j)}
+			rows[i*numWritesPerRoutine+j] = []any{uint16(i), uint16(j)}
 		}
 	}
 
