@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/apache/arrow/go/v14/arrow/array"
+	"github.com/apache/arrow/go/v14/arrow/ipc"
 )
 
 func TestKeepFlagsTrue(t *testing.T) {
@@ -652,7 +655,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields := append(sharedFieldsGT, "0|0", "0|0", "0|0", "0|0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an := makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1")
 
 	sampleMaf := float64(ac) / float64(an)
 
@@ -671,7 +674,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "0|1", "0|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -691,7 +694,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, ".|.", ".|.", ".|1", "1|.")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
 
 	sampleMaf = 0
 
@@ -710,7 +713,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, ".|1", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -731,7 +734,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|.", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -750,7 +753,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|1", "1|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -769,7 +772,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -791,7 +794,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -809,7 +812,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "1|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -827,7 +830,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "1|2|1:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -845,7 +848,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2|1", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -863,7 +866,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "2|2|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
@@ -881,7 +884,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "2|2|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
@@ -908,7 +911,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields := append(sharedFieldsGT, "0", ".", "1", "0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an := makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1")
 	sampleMaf := float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
@@ -926,7 +929,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "0:1", ".:1", "1:1", "0:1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
@@ -2896,5 +2899,89 @@ func TestManyAlleles(t *testing.T) {
 
 	if index+1 != 11 {
 		t.Errorf("NOT OK: 11 results not found. Found %d", index+1)
+	}
+}
+
+// test that we can write a genotype matrix
+func TestGenotypeMatrix(t *testing.T) {
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
+	row1 := strings.Join([]string{"1", "1000", "rs1", "A", "T", ".", "PASS", "DP=100", "GT", "1|1", "0|1", "0|0"}, "\t")
+	row2 := strings.Join([]string{"2", "200", "rs2", "C", "G", ".", "PASS", "DP=100", "GT", "0|1", "0|0", "1|1"}, "\t")
+	row3 := strings.Join([]string{"22", "300", "rs2", "G", "T", ".", "PASS", "DP=100", "GT", "0|.", "0|.", "1|1"}, "\t")
+
+	allowedFilters := map[string]bool{"PASS": true, ".": true}
+
+	lines := versionLine + "\n" + header + "\n" + row1 + "\n" + row2 + "\n" + row3 + "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters,
+		dosageMatrixOutPath: "./test_genotype_matrix.feather"}
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	readVcf(&config, reader, w)
+
+	// Read dosage matrix
+	file, err := os.Open("./test_genotype_matrix.feather")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	// Create a new IPC reader
+	arrowReader, err := ipc.NewFileReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer arrowReader.Close()
+
+	for i := 0; i < arrowReader.NumRecords(); i++ {
+		record, err := arrowReader.Record(i)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for rowIdx := 0; rowIdx < int(record.NumRows()); rowIdx++ {
+			switch record.Column(0).(*array.String).Value(rowIdx) {
+			case "chr1:1000:A:T":
+				genotypeS1 := record.Column(1).(*array.Int16).Value(rowIdx)
+				genotypeS2 := record.Column(2).(*array.Int16).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Int16).Value(rowIdx)
+
+				if genotypeS1 != 2 || genotypeS2 != 1 || genotypeS3 != 0 {
+					t.Error("NOT OK: Expected 2,1,0, got", genotypeS1, genotypeS2, genotypeS3)
+				}
+			case "chr2:200:C:G":
+				genotypeS1 := record.Column(1).(*array.Int16).Value(rowIdx)
+				genotypeS2 := record.Column(2).(*array.Int16).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Int16).Value(rowIdx)
+
+				if genotypeS1 != 1 || genotypeS2 != 0 || genotypeS3 != 2 {
+					t.Error("NOT OK: Expected 1,0,2, got", genotypeS1, genotypeS2, genotypeS3)
+				}
+			case "chr22:300:G:T":
+				if !record.Column(1).IsNull(rowIdx) {
+					t.Error("NOT OK: Expected null value for S1")
+				}
+
+				if !record.Column(2).IsNull(rowIdx) {
+					t.Error("NOT OK: Expected null value for S2")
+				}
+
+				genotypeS3 := record.Column(3).(*array.Int16).Value(rowIdx)
+
+				if genotypeS3 != 2 {
+					t.Error("NOT OK: Expected dosage of 2 for S3 got ", genotypeS3)
+				}
+			default:
+				t.Fatal("Unknown row")
+			}
+		}
+
+		//Clean up arrow file
+		os.Remove("./test_genotype_matrix.feather")
 	}
 }
