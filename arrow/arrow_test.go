@@ -168,7 +168,7 @@ func TestArrowWriteRead(t *testing.T) {
 		rows[i] = []any{uint16(i), uint16(i + 1), uint16(i + 2)}
 	}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 		fieldNames[i] = fmt.Sprintf("Field %d", i)
 	}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,14 +262,14 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 	readAndVerifyArrowFile(filePath, rows, false)
 }
 
-func TestArrowWriterConcurrency(t *testing.T) {
+func runConcurrentTest(compress bool) {
 	filePath := "concurrent_output.feather"
 	fieldNames := []string{"Field1", "Field2"}
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes)
+	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
@@ -290,7 +290,7 @@ func TestArrowWriterConcurrency(t *testing.T) {
 			batchSize := 1 + routineID%10
 			builder, err := NewArrowRowBuilder(writer, batchSize)
 			if err != nil {
-				t.Fatal(err)
+				log.Fatal(err)
 			}
 
 			defer wg.Done()
@@ -298,12 +298,12 @@ func TestArrowWriterConcurrency(t *testing.T) {
 				rowToWrite := rows[routineID*numWritesPerRoutine+j]
 
 				if err := builder.WriteRow(rowToWrite); err != nil {
-					t.Fatal(err)
+					log.Fatal(err)
 				}
 			}
 
 			if err := builder.Release(); err != nil {
-				t.Fatal(err)
+				log.Fatal(err)
 			}
 		}(writer, i)
 	}
@@ -311,8 +311,16 @@ func TestArrowWriterConcurrency(t *testing.T) {
 	wg.Wait()
 
 	if err := writer.Close(); err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 
 	readAndVerifyArrowFile(filePath, rows, true)
+}
+
+func TestArrowWriterConcurrency(t *testing.T) {
+	runConcurrentTest(false)
+}
+
+func TestArrowWriterConcurrencyWithCompression(t *testing.T) {
+	runConcurrentTest(true)
 }

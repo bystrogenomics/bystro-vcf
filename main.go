@@ -16,6 +16,9 @@ import (
 	"sync"
 
 	"github.com/akotlar/bystro-utils/parse"
+	"github.com/apache/arrow/go/v14/arrow"
+	"github.com/apache/arrow/go/v14/arrow/ipc"
+	bystroArrow "github.com/bystrogenomics/bystro-vcf/arrow"
 )
 
 var fileMutex sync.Mutex
@@ -58,20 +61,21 @@ const zeroByte = byte('0')
 const precision = 3
 
 type Config struct {
-	inPath          string
-	outPath         string
-	sampleListPath  string
-	famPath         string
-	errPath         string
-	emptyField      string
-	fieldDelimiter  string
-	keepID          bool
-	keepInfo        bool
-	keepQual        bool
-	keepPos         bool
-	cpuProfile      string
-	allowedFilters  map[string]bool
-	excludedFilters map[string]bool
+	inPath              string
+	outPath             string
+	dosageMatrixOutPath string
+	sampleListPath      string
+	famPath             string
+	errPath             string
+	emptyField          string
+	fieldDelimiter      string
+	keepID              bool
+	keepInfo            bool
+	keepQual            bool
+	keepPos             bool
+	cpuProfile          string
+	allowedFilters      map[string]bool
+	excludedFilters     map[string]bool
 }
 
 func setup(args []string) *Config {
@@ -80,6 +84,7 @@ func setup(args []string) *Config {
 	flag.StringVar(&config.famPath, "fam", "", "The fam file path (optional)")
 	flag.StringVar(&config.errPath, "err", "", "The log path (optional: default stderr)")
 	flag.StringVar(&config.outPath, "out", "", "The output path (optional: default stdout")
+	flag.StringVar(&config.dosageMatrixOutPath, "dosageOutput", "", "The output path for the dosage matrix (optional). If not provided, dosage matrix will not be output.")
 	flag.StringVar(&config.sampleListPath, "sample", "", "The output path of the sample list (optional: default stdout")
 	flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
 	flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
@@ -277,9 +282,30 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		log.Fatal("Couldn't write sample list file")
 	}
 
+	var arrowWriter *bystroArrow.ArrowWriter
+	if config.dosageMatrixOutPath != "" {
+		sampleNames := header[sampleIdx:]
+		fieldNames := append([]string{"locus"}, sampleNames...)
+
+		fieldTypes := make([]arrow.DataType, len(fieldNames))
+		fieldTypes[0] = arrow.BinaryTypes.String
+		for i := 1; i < len(fieldNames); i++ {
+			fieldTypes[i] = arrow.PrimitiveTypes.Int16
+		}
+
+		options := []ipc.Option{ipc.WithZstd()}
+
+		var err error
+		arrowWriter, err = bystroArrow.NewArrowWriter(config.dosageMatrixOutPath, fieldNames, fieldTypes, options)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer arrowWriter.Close()
+	}
+
 	// Spawn threads
 	for i := 0; i < concurrency; i++ {
-		go processLines(header, numChars, config, workQueue, writer, complete)
+		go processLines(header, numChars, config, workQueue, writer, complete, arrowWriter)
 	}
 
 	maxCapacity := 64
@@ -321,6 +347,11 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 	// Wait for everyone to finish.
 	for i := 0; i < concurrency; i++ {
 		<-complete
+	}
+
+	err = arrowWriter.Close()
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -402,7 +433,8 @@ func altIsValid(alt string) bool {
 	return true
 }
 
-func processLines(header []string, numChars int, config *Config, queue chan [][]byte, writer *bufio.Writer, complete chan bool) {
+func processLines(header []string, numChars int, config *Config, queue chan [][]byte,
+	writer *bufio.Writer, complete chan bool, arrowWriter *bystroArrow.ArrowWriter) {
 	var multiallelic bool
 
 	// Declare sample-related variables outside loop, in case this helps us
@@ -413,9 +445,11 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	var homs []string
 	var hets []string
 	var missing []string
+	var dosages []any
 	var effectiveSamples float64
 	var ac int
 	var an int
+	var chrom string
 
 	emptyField := config.emptyField
 	fieldDelim := config.fieldDelimiter
@@ -425,14 +459,23 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	excludedFilters := config.excludedFilters
 	keepPos := config.keepPos
 
-	if len(header) > 9 {
-		numSamples = float64(len(header) - 9)
-	} else if len(header) == 9 {
+	if len(header) > sampleIdx {
+		numSamples = float64(len(header) - sampleIdx)
+	} else if len(header) == sampleIdx {
 		log.Printf("Found 9 header fields. When genotypes present, we expect 1+ samples after FORMAT (10 fields minimum)")
 	}
 
 	var output bytes.Buffer
 	var record []string
+
+	var arrowBuilder *bystroArrow.ArrowRowBuilder
+	var err error
+	if arrowWriter != nil {
+		arrowBuilder, err = bystroArrow.NewArrowRowBuilder(arrowWriter, 2e6)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	for lines := range queue {
 		if output.Len() >= 2e6 {
@@ -461,11 +504,13 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 			multiallelic = siteType == parse.Multi
 
 			for i := range alts {
+				var arrowRow []any
+
 				strAlt := strconv.Itoa(altIndices[i] + 1)
 				// If no samples are provided, annotate what we can, skipping hets and homs
 				// If samples are provided, but only missing genotypes, skip the site altogether
 				if numSamples > 0 {
-					homs, hets, missing, ac, an = makeHetHomozygotes(record, header, strAlt)
+					homs, hets, missing, dosages, ac, an = makeHetHomozygotes(record, header, strAlt)
 
 					if len(homs) == 0 && len(hets) == 0 {
 						continue
@@ -480,10 +525,12 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 				// if keepInfo append [alleleIndex, info]
 
 				if len(record[chromIdx]) < 4 || record[chromIdx][0] != chrByte {
-					output.WriteString("chr")
+					chrom = "chr" + record[chromIdx]
+				} else {
+					chrom = record[chromIdx]
 				}
 
-				output.WriteString(record[chromIdx])
+				output.WriteString(chrom)
 				output.WriteByte(tabByte)
 
 				output.WriteString(positions[i])
@@ -497,6 +544,16 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 
 				output.WriteString(alts[i])
 				output.WriteByte(tabByte)
+
+				if arrowBuilder != nil {
+					arrowRow = append(arrowRow, fmt.Sprintf("%s:%s:%s:%s", chrom, positions[i], string(refs[i]), alts[i]))
+
+					if numSamples > 0 {
+						arrowRow = append(arrowRow, dosages...)
+					}
+
+					arrowBuilder.WriteRow(arrowRow)
+				}
 
 				if multiallelic {
 					output.WriteString(parse.NotTrTv)
@@ -594,6 +651,10 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 
 			}
 		}
+
+		if arrowBuilder != nil {
+			arrowBuilder.WriteRow(nil)
+		}
 	}
 
 	if output.Len() > 0 {
@@ -602,6 +663,11 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 		writer.Write(output.Bytes())
 
 		fileMutex.Unlock()
+	}
+
+	err = arrowBuilder.Release()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	complete <- true
@@ -926,10 +992,11 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 
 // makeHetHomozygotes process all sample genotype fields, and for a single alleleNum, which is the allele index (1 based)
 // returns the homozygotes, heterozygotes, missing samples, total alt counts, genotype counts, and missing counts
-func makeHetHomozygotes(fields []string, header []string, alleleNum string) ([]string, []string, []string, int, int) {
+func makeHetHomozygotes(fields []string, header []string, alleleNum string) ([]string, []string, []string, []any, int, int) {
 	var homs []string
 	var hets []string
 	var missing []string
+	var dosages []any
 
 	var gtCount int
 	var altCount int
@@ -951,6 +1018,7 @@ SAMPLES:
 			// Reference is the most common case, e.g. 0|0, 0/0
 			if sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == '0' {
 				totalGtCount += 2
+				dosages = append(dosages, int16(0))
 				continue SAMPLES
 			}
 
@@ -962,6 +1030,8 @@ SAMPLES:
 					totalGtCount += 2
 					totalAltCount += 1
 					hets = append(hets, header[i])
+					dosages = append(dosages, int16(1))
+
 					continue SAMPLES
 				}
 
@@ -970,6 +1040,8 @@ SAMPLES:
 					totalGtCount += 2
 					totalAltCount += 2
 					homs = append(homs, header[i])
+					dosages = append(dosages, int16(2))
+
 					continue SAMPLES
 				}
 			}
@@ -977,6 +1049,8 @@ SAMPLES:
 			// N|., .|N, .|., N/., ./N, ./. are all considered missing samples, because if one site is missing, the other is likely unreliable
 			if sampleGenotypeField[0] == '.' || sampleGenotypeField[2] == '.' {
 				missing = append(missing, header[i])
+				dosages = append(dosages, nil)
+
 				continue SAMPLES
 			}
 		}
@@ -1020,16 +1094,18 @@ SAMPLES:
 		totalGtCount += gtCount
 		totalAltCount += altCount
 
+		dosages = append(dosages, int16(altCount))
+
 		if altCount == 0 {
 			continue
 		}
 
-		if altCount == gtCount {
+		if int(altCount) == gtCount {
 			homs = append(homs, header[i])
 		} else {
 			hets = append(hets, header[i])
 		}
 	}
 
-	return homs, hets, missing, totalAltCount, totalGtCount
+	return homs, hets, missing, dosages, totalAltCount, totalGtCount
 }
