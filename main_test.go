@@ -2985,3 +2985,56 @@ func TestGenotypeMatrix(t *testing.T) {
 		os.Remove("./test_genotype_matrix.feather")
 	}
 }
+
+// test that we can write a genotype matrix
+func TestNoOut(t *testing.T) {
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
+	row1 := strings.Join([]string{"1", "1000", "rs1", "A", "T", ".", "PASS", "DP=100", "GT", "1|1", "0|1", "0|0"}, "\t")
+
+	allowedFilters := map[string]bool{"PASS": true, ".": true}
+
+	lines := versionLine + "\n" + header + "\n" + row1 + "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters,
+		dosageMatrixOutPath: "./test_genotype_matrix.feather", noOut: true}
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	results := bufio.NewScanner(byteBuf)
+
+	readVcf(&config, reader, w)
+	w.Flush()
+
+	index := -1
+	for results.Scan() {
+		index++
+	}
+
+	if index != -1 {
+		t.Error("NOT OK: Expected no output")
+	}
+
+	// Read dosage matrix
+	file, err := os.Open("./test_genotype_matrix.feather")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	// Create a new IPC reader
+	arrowReader, err := ipc.NewFileReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer arrowReader.Close()
+
+	if arrowReader.NumRecords() == 0 {
+		t.Error("NOT OK: Expected to write dosage matrix")
+	}
+
+	//Clean up arrow file
+	os.Remove("./test_genotype_matrix.feather")
+}
