@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"sync"
@@ -168,7 +169,7 @@ func TestArrowWriteRead(t *testing.T) {
 		rows[i] = []any{uint16(i), uint16(i + 1), uint16(i + 2)}
 	}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
+	writer, err := NewArrowIPCFileWriter(filePath, fieldNames, fieldTypes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +236,7 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 		fieldNames[i] = fmt.Sprintf("Field %d", i)
 	}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
+	writer, err := NewArrowIPCFileWriter(filePath, fieldNames, fieldTypes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +268,7 @@ func runConcurrentTest(compress bool) {
 	fieldNames := []string{"Field1", "Field2"}
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
+	writer, err := NewArrowIPCFileWriter(filePath, fieldNames, fieldTypes)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -323,4 +324,19 @@ func TestArrowWriterConcurrency(t *testing.T) {
 
 func TestArrowWriterConcurrencyWithCompression(t *testing.T) {
 	runConcurrentTest(true)
+}
+
+func TestNewArrowIPCFileWriterWithZstdOption(t *testing.T) {
+	filePath := filepath.Join(os.TempDir(), "test.arrow")
+	fieldNames := []string{"field1", "field2"}
+	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Int32, arrow.PrimitiveTypes.Float64}
+
+	// Call the constructor
+	_, err := NewArrowIPCFileWriter(filePath, fieldNames, fieldTypes, ipc.WithZstd())
+	if err != nil {
+		t.Errorf("Unexpected error when passing WithZstd as an option: %v", err)
+	}
+
+	// Cleanup
+	os.Remove(filePath)
 }

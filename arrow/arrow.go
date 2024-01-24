@@ -22,14 +22,15 @@ type ArrowWriter struct {
 // must match. The number of rows in each chunk is determined by chunkSize.
 // The ArrowWriter will write to filePath.
 // This writing operation is threadsafe.
-func NewArrowWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType, options []ipc.Option) (*ArrowWriter, error) {
+func NewArrowIPCFileWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType, options ...ipc.Option) (*ArrowWriter, error) {
 	schema := makeSchema(fieldNames, fieldTypes)
 	file, err := os.Create(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	writer, err := ipc.NewFileWriter(file, append([]ipc.Option{ipc.WithSchema(schema)}, options...)...)
+	schemaOption := ipc.WithSchema(schema)
+	writer, err := ipc.NewFileWriter(file, append([]ipc.Option{schemaOption}, options...)...)
 	if err != nil {
 		return nil, err
 	}
