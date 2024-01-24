@@ -655,7 +655,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields := append(sharedFieldsGT, "0|0", "0|0", "0|0", "0|0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf := float64(ac) / float64(an)
 
@@ -674,7 +674,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "0|1", "0|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -694,7 +694,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, ".|.", ".|.", ".|1", "1|.")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = 0
 
@@ -713,7 +713,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, ".|1", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -734,7 +734,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|.", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -753,7 +753,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|1", "1|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -772,7 +772,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -794,7 +794,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -812,7 +812,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "1|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -830,7 +830,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "1|2|1:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -848,7 +848,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2|1", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -866,7 +866,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "2|2|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
@@ -884,7 +884,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "2|2|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
@@ -911,7 +911,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields := append(sharedFieldsGT, "0", ".", "1", "0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1", true, true)
 	sampleMaf := float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
@@ -929,7 +929,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "0:1", ".:1", "1:1", "0:1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {

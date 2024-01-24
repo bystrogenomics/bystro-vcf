@@ -370,9 +370,11 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		<-complete
 	}
 
-	err = arrowWriter.Close()
-	if err != nil {
-		log.Fatal(err)
+	if arrowWriter != nil {
+		err = arrowWriter.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -480,6 +482,9 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	excludedFilters := config.excludedFilters
 	keepPos := config.keepPos
 
+	needsLabels := !config.noOut
+	needsDosages := config.dosageMatrixOutPath != ""
+
 	if len(header) > sampleIdx {
 		numSamples = float64(len(header) - sampleIdx)
 	} else if len(header) == sampleIdx {
@@ -531,9 +536,9 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 				// If no samples are provided, annotate what we can, skipping hets and homs
 				// If samples are provided, but only missing genotypes, skip the site altogether
 				if numSamples > 0 {
-					homs, hets, missing, dosages, ac, an = makeHetHomozygotes(record, header, strAlt)
+					homs, hets, missing, dosages, ac, an = makeHetHomozygotes(record, header, strAlt, needsLabels, needsDosages)
 
-					if len(homs) == 0 && len(hets) == 0 {
+					if ac == 0 {
 						continue
 					}
 
@@ -688,9 +693,11 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 		fileMutex.Unlock()
 	}
 
-	err = arrowBuilder.Release()
-	if err != nil {
-		log.Fatal(err)
+	if arrowBuilder != nil {
+		err = arrowBuilder.Release()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	complete <- true
@@ -1015,7 +1022,7 @@ func getAlleles(chrom string, pos string, ref string, alt string) (string, []str
 
 // makeHetHomozygotes process all sample genotype fields, and for a single alleleNum, which is the allele index (1 based)
 // returns the homozygotes, heterozygotes, missing samples, total alt counts, genotype counts, and missing counts
-func makeHetHomozygotes(fields []string, header []string, alleleNum string) ([]string, []string, []string, []any, int, int) {
+func makeHetHomozygotes(fields []string, header []string, alleleNum string, needsLabels bool, needsDosages bool) ([]string, []string, []string, []any, int, int) {
 	var homs []string
 	var hets []string
 	var missing []string
@@ -1041,7 +1048,11 @@ SAMPLES:
 			// Reference is the most common case, e.g. 0|0, 0/0
 			if sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == '0' {
 				totalGtCount += 2
-				dosages = append(dosages, int16(0))
+
+				if needsDosages {
+					dosages = append(dosages, int16(0))
+				}
+
 				continue SAMPLES
 			}
 
@@ -1052,8 +1063,14 @@ SAMPLES:
 				if (sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == alleleNum[0]) || (sampleGenotypeField[0] == alleleNum[0] && sampleGenotypeField[2] == '0') {
 					totalGtCount += 2
 					totalAltCount += 1
-					hets = append(hets, header[i])
-					dosages = append(dosages, int16(1))
+
+					if needsLabels {
+						hets = append(hets, header[i])
+					}
+
+					if needsDosages {
+						dosages = append(dosages, int16(1))
+					}
 
 					continue SAMPLES
 				}
@@ -1062,8 +1079,14 @@ SAMPLES:
 				if sampleGenotypeField[0] == alleleNum[0] && sampleGenotypeField[2] == alleleNum[0] {
 					totalGtCount += 2
 					totalAltCount += 2
-					homs = append(homs, header[i])
-					dosages = append(dosages, int16(2))
+
+					if needsLabels {
+						homs = append(homs, header[i])
+					}
+
+					if needsDosages {
+						dosages = append(dosages, int16(2))
+					}
 
 					continue SAMPLES
 				}
@@ -1071,8 +1094,13 @@ SAMPLES:
 
 			// N|., .|N, .|., N/., ./N, ./. are all considered missing samples, because if one site is missing, the other is likely unreliable
 			if sampleGenotypeField[0] == '.' || sampleGenotypeField[2] == '.' {
-				missing = append(missing, header[i])
-				dosages = append(dosages, nil)
+				if needsLabels {
+					missing = append(missing, header[i])
+				}
+
+				if needsDosages {
+					dosages = append(dosages, nil)
+				}
 
 				continue SAMPLES
 			}
@@ -1103,7 +1131,14 @@ SAMPLES:
 
 		for _, allele := range alleles {
 			if allele == "." {
-				missing = append(missing, header[i])
+				if needsLabels {
+					missing = append(missing, header[i])
+				}
+
+				if needsDosages {
+					dosages = append(dosages, nil)
+				}
+
 				continue SAMPLES
 			}
 
@@ -1117,16 +1152,20 @@ SAMPLES:
 		totalGtCount += gtCount
 		totalAltCount += altCount
 
-		dosages = append(dosages, int16(altCount))
+		if needsDosages {
+			dosages = append(dosages, int16(altCount))
+		}
 
 		if altCount == 0 {
 			continue
 		}
 
-		if int(altCount) == gtCount {
-			homs = append(homs, header[i])
-		} else {
-			hets = append(hets, header[i])
+		if needsLabels {
+			if int(altCount) == gtCount {
+				homs = append(homs, header[i])
+			} else {
+				hets = append(hets, header[i])
+			}
 		}
 	}
 
