@@ -63,6 +63,7 @@ const precision = 3
 type Config struct {
 	inPath              string
 	outPath             string
+	noOut               bool
 	dosageMatrixOutPath string
 	sampleListPath      string
 	famPath             string
@@ -83,9 +84,10 @@ func setup(args []string) *Config {
 	flag.StringVar(&config.inPath, "in", "", "The input file path (optional: default stdin)")
 	flag.StringVar(&config.famPath, "fam", "", "The fam file path (optional)")
 	flag.StringVar(&config.errPath, "err", "", "The log path (optional: default stderr)")
-	flag.StringVar(&config.outPath, "out", "", "The output path (optional: default stdout")
+	flag.StringVar(&config.outPath, "out", "", "The output path (optional: default stdout)")
+	flag.BoolVar(&config.noOut, "noOut", false, "Skip writing output (useful in conjunction with dosageOutput)")
 	flag.StringVar(&config.dosageMatrixOutPath, "dosageOutput", "", "The output path for the dosage matrix (optional). If not provided, dosage matrix will not be output.")
-	flag.StringVar(&config.sampleListPath, "sample", "", "The output path of the sample list (optional: default stdout")
+	flag.StringVar(&config.sampleListPath, "sample", "", "The output path of the sample list (optional: default stdout)")
 	flag.StringVar(&config.emptyField, "emptyField", "!", "The output path for the JSON output (optional)")
 	flag.StringVar(&config.fieldDelimiter, "fieldDelimiter", ";", "The output path for the JSON output (optional)")
 	flag.BoolVar(&config.keepID, "keepId", false, "Retain the ID field in output")
@@ -154,18 +156,29 @@ func main() {
 	}
 
 	outFh := (*os.File)(nil)
-	if config.outPath != "" {
-		var err error
 
-		outFh, err = os.OpenFile(config.outPath, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		outFh = os.Stdout
+	if config.noOut && config.outPath != "" {
+		log.Fatal("Cannot specify --noOut and --out")
 	}
 
-	defer outFh.Close()
+	if config.noOut && config.outPath == "" && config.dosageMatrixOutPath == "" {
+		log.Fatal("When specifying --noOut, must specify either --out or --dosageOutput")
+	}
+
+	if !config.noOut {
+		if config.outPath != "" {
+			var err error
+
+			outFh, err = os.OpenFile(config.outPath, os.O_WRONLY|os.O_CREATE, 0644)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			outFh = os.Stdout
+		}
+
+		defer outFh.Close()
+	}
 
 	if config.cpuProfile != "" {
 		f, err := os.Create(config.cpuProfile)
@@ -178,22 +191,28 @@ func main() {
 
 	reader := bufio.NewReaderSize(inFh, 48*1024*1024)
 
-	writer := bufio.NewWriterSize(outFh, 48*1024*1024)
+	var writer *bufio.Writer
 
-	fmt.Fprintln(writer, stringHeader(config))
+	if !config.noOut {
+		writer = bufio.NewWriterSize(outFh, 48*1024*1024)
+
+		fmt.Fprintln(writer, stringHeader(config))
+	}
 
 	readVcf(config, reader, writer)
 
-	err := writer.Flush()
+	if !config.noOut {
+		err := writer.Flush()
 
-	if err != nil {
-		log.Fatal(err)
-	}
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	err = outFh.Close()
+		err = outFh.Close()
 
-	if err != nil {
-		log.Print(err)
+		if err != nil {
+			log.Print(err)
+		}
 	}
 }
 
@@ -276,10 +295,12 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 
 	parse.NormalizeHeader(header)
 
-	err = writeSampleListIfWanted(config, header)
+	if !config.noOut {
+		err = writeSampleListIfWanted(config, header)
 
-	if err != nil {
-		log.Fatal("Couldn't write sample list file")
+		if err != nil {
+			log.Fatal("Couldn't write sample list file")
+		}
 	}
 
 	var arrowWriter *bystroArrow.ArrowWriter
@@ -478,7 +499,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	}
 
 	for lines := range queue {
-		if output.Len() >= 2e6 {
+		if !config.noOut && output.Len() >= 2e6 {
 			fileMutex.Lock()
 
 			writer.Write(output.Bytes())
@@ -530,21 +551,6 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 					chrom = record[chromIdx]
 				}
 
-				output.WriteString(chrom)
-				output.WriteByte(tabByte)
-
-				output.WriteString(positions[i])
-				output.WriteByte(tabByte)
-
-				output.WriteString(siteType)
-				output.WriteByte(tabByte)
-
-				output.WriteByte(refs[i])
-				output.WriteByte(tabByte)
-
-				output.WriteString(alts[i])
-				output.WriteByte(tabByte)
-
 				if arrowBuilder != nil {
 					arrowRow = append(arrowRow, fmt.Sprintf("%s:%s:%s:%s", chrom, positions[i], string(refs[i]), alts[i]))
 
@@ -555,99 +561,116 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 					arrowBuilder.WriteRow(arrowRow)
 				}
 
-				if multiallelic {
-					output.WriteString(parse.NotTrTv)
-				} else {
-					output.WriteString(parse.GetTrTv(string(refs[i]), alts[i]))
+				if !config.noOut {
+					output.WriteString(chrom)
+					output.WriteByte(tabByte)
+
+					output.WriteString(positions[i])
+					output.WriteByte(tabByte)
+
+					output.WriteString(siteType)
+					output.WriteByte(tabByte)
+
+					output.WriteByte(refs[i])
+					output.WriteByte(tabByte)
+
+					output.WriteString(alts[i])
+					output.WriteByte(tabByte)
+
+					if multiallelic {
+						output.WriteString(parse.NotTrTv)
+					} else {
+						output.WriteString(parse.GetTrTv(string(refs[i]), alts[i]))
+					}
+
+					output.WriteByte(tabByte)
+
+					// Write missing samples
+					// heterozygotes \t heterozygosity
+					if len(hets) == 0 {
+						output.WriteString(emptyField)
+						output.WriteByte(tabByte)
+						output.WriteByte(zeroByte)
+					} else {
+						output.WriteString(strings.Join(hets, fieldDelim))
+						output.WriteByte(tabByte)
+
+						// This gives plenty precision; we are mostly interested in
+						// the first or maybe 2-3 significant digits
+						// https://play.golang.org/p/Ux-QmClaJG
+						// Also, gnomAD seems to use 6 bits of precision
+						// the bitSize == 64 allows us to round properly past 6 s.f
+						// Note: 'G' requires these numbers to be < 0 for proper precision
+						// (elase only 6 s.f total, rather than after decimal)
+						output.WriteString(strconv.FormatFloat(float64(len(hets))/effectiveSamples, 'G', precision, 64))
+					}
+
+					output.WriteByte(tabByte)
+
+					// Write missing samples
+					// homozygotes \t homozygosity
+					if len(homs) == 0 {
+						output.WriteString(emptyField)
+						output.WriteByte(tabByte)
+						output.WriteByte(zeroByte)
+					} else {
+						output.WriteString(strings.Join(homs, fieldDelim))
+						output.WriteByte(tabByte)
+						output.WriteString(strconv.FormatFloat(float64(len(homs))/effectiveSamples, 'G', precision, 64))
+					}
+
+					output.WriteByte(tabByte)
+
+					// Write missing samples
+					// missingGenos \t missingness
+					if len(missing) == 0 {
+						output.WriteString(emptyField)
+						output.WriteByte(tabByte)
+						output.WriteByte(zeroByte)
+					} else {
+						output.WriteString(strings.Join(missing, fieldDelim))
+						output.WriteByte(tabByte)
+						output.WriteString(strconv.FormatFloat(float64(len(missing))/numSamples, 'G', precision, 64))
+					}
+
+					// Write the sample minor allele frequency
+					output.WriteByte(tabByte)
+
+					output.WriteString(strconv.Itoa(ac))
+					output.WriteByte(tabByte)
+					output.WriteString(strconv.Itoa(an))
+					output.WriteByte(tabByte)
+
+					// TODO: can ac == 0 && (len(het) > 0 || len(hom) > 0) occur?
+					if ac == 0 {
+						output.WriteByte(zeroByte)
+					} else {
+						output.WriteString(strconv.FormatFloat(float64(ac)/float64(an), 'G', precision, 64))
+					}
+
+					/******************* Optional Fields ***********************/
+					if keepPos == true {
+						output.WriteByte(tabByte)
+						output.WriteString(record[posIdx])
+					}
+
+					if keepID == true {
+						output.WriteByte(tabByte)
+						output.WriteString(record[idIdx])
+					}
+
+					if keepInfo == true {
+						// Write the index of the allele, to allow users to segregate data in the INFO field
+						output.WriteByte(tabByte)
+						output.WriteString(strconv.Itoa(altIndices[i]))
+
+						// Write info for all indices
+						output.WriteByte(tabByte)
+						output.WriteString(record[infoIdx])
+					}
+
+					output.WriteByte(clByte)
 				}
-
-				output.WriteByte(tabByte)
-
-				// Write missing samples
-				// heterozygotes \t heterozygosity
-				if len(hets) == 0 {
-					output.WriteString(emptyField)
-					output.WriteByte(tabByte)
-					output.WriteByte(zeroByte)
-				} else {
-					output.WriteString(strings.Join(hets, fieldDelim))
-					output.WriteByte(tabByte)
-
-					// This gives plenty precision; we are mostly interested in
-					// the first or maybe 2-3 significant digits
-					// https://play.golang.org/p/Ux-QmClaJG
-					// Also, gnomAD seems to use 6 bits of precision
-					// the bitSize == 64 allows us to round properly past 6 s.f
-					// Note: 'G' requires these numbers to be < 0 for proper precision
-					// (elase only 6 s.f total, rather than after decimal)
-					output.WriteString(strconv.FormatFloat(float64(len(hets))/effectiveSamples, 'G', precision, 64))
-				}
-
-				output.WriteByte(tabByte)
-
-				// Write missing samples
-				// homozygotes \t homozygosity
-				if len(homs) == 0 {
-					output.WriteString(emptyField)
-					output.WriteByte(tabByte)
-					output.WriteByte(zeroByte)
-				} else {
-					output.WriteString(strings.Join(homs, fieldDelim))
-					output.WriteByte(tabByte)
-					output.WriteString(strconv.FormatFloat(float64(len(homs))/effectiveSamples, 'G', precision, 64))
-				}
-
-				output.WriteByte(tabByte)
-
-				// Write missing samples
-				// missingGenos \t missingness
-				if len(missing) == 0 {
-					output.WriteString(emptyField)
-					output.WriteByte(tabByte)
-					output.WriteByte(zeroByte)
-				} else {
-					output.WriteString(strings.Join(missing, fieldDelim))
-					output.WriteByte(tabByte)
-					output.WriteString(strconv.FormatFloat(float64(len(missing))/numSamples, 'G', precision, 64))
-				}
-
-				// Write the sample minor allele frequency
-				output.WriteByte(tabByte)
-
-				output.WriteString(strconv.Itoa(ac))
-				output.WriteByte(tabByte)
-				output.WriteString(strconv.Itoa(an))
-				output.WriteByte(tabByte)
-
-				// TODO: can ac == 0 && (len(het) > 0 || len(hom) > 0) occur?
-				if ac == 0 {
-					output.WriteByte(zeroByte)
-				} else {
-					output.WriteString(strconv.FormatFloat(float64(ac)/float64(an), 'G', precision, 64))
-				}
-
-				/******************* Optional Fields ***********************/
-				if keepPos == true {
-					output.WriteByte(tabByte)
-					output.WriteString(record[posIdx])
-				}
-
-				if keepID == true {
-					output.WriteByte(tabByte)
-					output.WriteString(record[idIdx])
-				}
-
-				if keepInfo == true {
-					// Write the index of the allele, to allow users to segregate data in the INFO field
-					output.WriteByte(tabByte)
-					output.WriteString(strconv.Itoa(altIndices[i]))
-
-					// Write info for all indices
-					output.WriteByte(tabByte)
-					output.WriteString(record[infoIdx])
-				}
-
-				output.WriteByte(clByte)
 
 			}
 		}
@@ -657,7 +680,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 		}
 	}
 
-	if output.Len() > 0 {
+	if !config.noOut && output.Len() > 0 {
 		fileMutex.Lock()
 
 		writer.Write(output.Bytes())
