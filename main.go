@@ -564,7 +564,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 					arrowBuilder.WriteRow(arrowRow)
 				}
 
-				if !config.noOut {
+				if needsLabels {
 					output.WriteString(chrom)
 					output.WriteByte(tabByte)
 
