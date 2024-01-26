@@ -161,8 +161,8 @@ func main() {
 		log.Fatal("Cannot specify --noOut and --out")
 	}
 
-	if config.noOut && config.outPath == "" && config.dosageMatrixOutPath == "" {
-		log.Fatal("When specifying --noOut, must specify either --out or --dosageOutput")
+	if config.noOut && config.dosageMatrixOutPath == "" {
+		log.Fatal("When specifying --noOut, must specify --dosageOutput")
 	}
 
 	if !config.noOut {
