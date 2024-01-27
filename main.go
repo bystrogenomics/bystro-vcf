@@ -311,7 +311,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 		fieldTypes := make([]arrow.DataType, len(fieldNames))
 		fieldTypes[0] = arrow.BinaryTypes.String
 		for i := 1; i < len(fieldNames); i++ {
-			fieldTypes[i] = arrow.PrimitiveTypes.Int16
+			fieldTypes[i] = arrow.PrimitiveTypes.Uint16
 		}
 
 		file, err := os.Create(config.dosageMatrixOutPath)
@@ -1053,7 +1053,7 @@ SAMPLES:
 				totalGtCount += 2
 
 				if needsDosages {
-					dosages = append(dosages, int16(0))
+					dosages = append(dosages, uint16(0))
 				}
 
 				continue SAMPLES
@@ -1072,7 +1072,7 @@ SAMPLES:
 					}
 
 					if needsDosages {
-						dosages = append(dosages, int16(1))
+						dosages = append(dosages, uint16(1))
 					}
 
 					continue SAMPLES
@@ -1088,7 +1088,7 @@ SAMPLES:
 					}
 
 					if needsDosages {
-						dosages = append(dosages, int16(2))
+						dosages = append(dosages, uint16(2))
 					}
 
 					continue SAMPLES
@@ -1156,7 +1156,7 @@ SAMPLES:
 		totalAltCount += altCount
 
 		if needsDosages {
-			dosages = append(dosages, int16(altCount))
+			dosages = append(dosages, uint16(altCount))
 		}
 
 		if altCount == 0 {

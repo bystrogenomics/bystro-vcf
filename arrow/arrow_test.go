@@ -287,7 +287,13 @@ func runConcurrentTest(compress bool) {
 	fieldNames := []string{"Field1", "Field2"}
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
 
-	writer, err := NewArrowIPCFileWriter(file, fieldNames, fieldTypes)
+	var writer *ArrowWriter
+	if compress {
+		writer, err = NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
+	} else {
+		writer, err = NewArrowIPCFileWriter(file, fieldNames, fieldTypes)
+	}
+
 	if err != nil {
 		log.Fatal(err)
 	}
