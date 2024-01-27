@@ -356,7 +356,6 @@ func TestNewArrowIPCFileWriterWithZstdOption(t *testing.T) {
 	fieldNames := []string{"field1", "field2"}
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Int32, arrow.PrimitiveTypes.Float64}
 
-	// Call the constructor
 	_, err = NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
 	if err != nil {
 		t.Errorf("Unexpected error when passing WithZstd as an option: %v", err)
