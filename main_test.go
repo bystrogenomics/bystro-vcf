@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -2904,6 +2905,8 @@ func TestManyAlleles(t *testing.T) {
 
 // test that we can write a genotype matrix
 func TestGenotypeMatrix(t *testing.T) {
+	filePath := filepath.Join(os.TempDir(), "./test_genotype_matrix.feather")
+
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
 	row1 := strings.Join([]string{"1", "1000", "rs1", "A", "T", ".", "PASS", "DP=100", "GT", "1|1", "0|1", "0|0"}, "\t")
@@ -2916,7 +2919,7 @@ func TestGenotypeMatrix(t *testing.T) {
 	reader := bufio.NewReader(strings.NewReader(lines))
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters,
-		dosageMatrixOutPath: "./test_genotype_matrix.feather"}
+		dosageMatrixOutPath: filePath}
 
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
@@ -2924,7 +2927,7 @@ func TestGenotypeMatrix(t *testing.T) {
 	readVcf(&config, reader, w)
 
 	// Read dosage matrix
-	file, err := os.Open("./test_genotype_matrix.feather")
+	file, err := os.Open(filePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2982,12 +2985,14 @@ func TestGenotypeMatrix(t *testing.T) {
 		}
 
 		//Clean up arrow file
-		os.Remove("./test_genotype_matrix.feather")
+		os.Remove(filePath)
 	}
 }
 
 // test that we can write a genotype matrix
 func TestNoOut(t *testing.T) {
+	filePath := filepath.Join(os.TempDir(), "./test_genotype_matrix.feather")
+
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
 	row1 := strings.Join([]string{"1", "1000", "rs1", "A", "T", ".", "PASS", "DP=100", "GT", "1|1", "0|1", "0|0"}, "\t")
@@ -2998,7 +3003,7 @@ func TestNoOut(t *testing.T) {
 	reader := bufio.NewReader(strings.NewReader(lines))
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters,
-		dosageMatrixOutPath: "./test_genotype_matrix.feather", noOut: true}
+		dosageMatrixOutPath: filePath, noOut: true}
 
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
@@ -3018,7 +3023,7 @@ func TestNoOut(t *testing.T) {
 	}
 
 	// Read dosage matrix
-	file, err := os.Open("./test_genotype_matrix.feather")
+	file, err := os.Open(filePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3035,6 +3040,5 @@ func TestNoOut(t *testing.T) {
 		t.Error("NOT OK: Expected to write dosage matrix")
 	}
 
-	//Clean up arrow file
-	os.Remove("./test_genotype_matrix.feather")
+	os.Remove(filePath)
 }

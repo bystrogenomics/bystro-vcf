@@ -314,8 +314,13 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 			fieldTypes[i] = arrow.PrimitiveTypes.Int16
 		}
 
-		var err error
-		arrowWriter, err = bystroArrow.NewArrowIPCFileWriter(config.dosageMatrixOutPath, fieldNames, fieldTypes, ipc.WithZstd())
+		file, err := os.Create(config.dosageMatrixOutPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		arrowWriter, err = bystroArrow.NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
 		if err != nil {
 			log.Fatal(err)
 		}

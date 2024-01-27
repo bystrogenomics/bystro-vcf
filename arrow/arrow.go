@@ -12,33 +12,27 @@ import (
 )
 
 type ArrowWriter struct {
-	filePath string
-	schema   *arrow.Schema
-	writer   *ipc.FileWriter
-	mu       sync.Mutex
+	schema *arrow.Schema
+	writer *ipc.FileWriter
+	mu     sync.Mutex
 }
 
 // Create a new ArrowWriter. The number of fields in fieldNames and fieldTypes
 // must match. The number of rows in each chunk is determined by chunkSize.
 // The ArrowWriter will write to filePath.
 // This writing operation is threadsafe.
-func NewArrowIPCFileWriter(filePath string, fieldNames []string, fieldTypes []arrow.DataType, options ...ipc.Option) (*ArrowWriter, error) {
+func NewArrowIPCFileWriter(f *os.File, fieldNames []string, fieldTypes []arrow.DataType, options ...ipc.Option) (*ArrowWriter, error) {
 	schema := makeSchema(fieldNames, fieldTypes)
-	file, err := os.Create(filePath)
-	if err != nil {
-		return nil, err
-	}
 
 	schemaOption := ipc.WithSchema(schema)
-	writer, err := ipc.NewFileWriter(file, append([]ipc.Option{schemaOption}, options...)...)
+	writer, err := ipc.NewFileWriter(f, append([]ipc.Option{schemaOption}, options...)...)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ArrowWriter{
-		filePath: filePath,
-		schema:   schema,
-		writer:   writer,
+		schema: schema,
+		writer: writer,
 	}, nil
 }
 
