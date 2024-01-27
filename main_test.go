@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -168,7 +169,9 @@ func TestHeader(t *testing.T) {
 }
 
 func TestWriteSampleListIfWanted(t *testing.T) {
-	config := Config{sampleListPath: "./test.sample_list"}
+	filePath := path.Join(t.TempDir(), "./test.sample_list")
+
+	config := Config{sampleListPath: filePath}
 
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
@@ -188,7 +191,7 @@ func TestWriteSampleListIfWanted(t *testing.T) {
 
 	readVcf(&config, reader, w)
 
-	inFh, err := os.Open("./test.sample_list")
+	inFh, err := os.Open(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -225,7 +228,8 @@ func TestWriteSampleListIfWanted(t *testing.T) {
 }
 
 func TestWriteSampleListWhenNoSamples(t *testing.T) {
-	config := Config{sampleListPath: "./test.sample_list_2"}
+	filePath := path.Join(t.TempDir(), "./test.sample_list_2")
+	config := Config{sampleListPath: filePath}
 
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
@@ -245,7 +249,7 @@ func TestWriteSampleListWhenNoSamples(t *testing.T) {
 
 	readVcf(&config, reader, w)
 
-	inFh, err := os.Open("./test.sample_list_2")
+	inFh, err := os.Open(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -2905,7 +2909,7 @@ func TestManyAlleles(t *testing.T) {
 
 // test that we can write a genotype matrix
 func TestGenotypeMatrix(t *testing.T) {
-	filePath := filepath.Join(os.TempDir(), "./test_genotype_matrix.feather")
+	filePath := filepath.Join(t.TempDir(), "./test_genotype_matrix.feather")
 
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
@@ -2983,15 +2987,12 @@ func TestGenotypeMatrix(t *testing.T) {
 				t.Fatal("Unknown row")
 			}
 		}
-
-		//Clean up arrow file
-		os.Remove(filePath)
 	}
 }
 
 // test that we can write a genotype matrix
 func TestNoOut(t *testing.T) {
-	filePath := filepath.Join(os.TempDir(), "./test_genotype_matrix.feather")
+	filePath := filepath.Join(t.TempDir(), "./test_genotype_matrix.feather")
 
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
@@ -3039,6 +3040,4 @@ func TestNoOut(t *testing.T) {
 	if arrowReader.NumRecords() == 0 {
 		t.Error("NOT OK: Expected to write dosage matrix")
 	}
-
-	os.Remove(filePath)
 }

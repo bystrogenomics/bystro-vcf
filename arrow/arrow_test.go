@@ -2,7 +2,6 @@ package arrow
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -138,11 +137,11 @@ func readArrowRows(filePath string) ([][]any, error) {
 	return readRows, nil
 }
 
-func readAndVerifyArrowFile(filePath string, expectedRows [][]any, sort bool) {
+func checkArrowFile(t *testing.T, filePath string, expectedRows [][]any, sort bool) {
 	readRows, err := readArrowRows(filePath)
 
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	if sort {
@@ -152,14 +151,14 @@ func readAndVerifyArrowFile(filePath string, expectedRows [][]any, sort bool) {
 
 	for i, row := range readRows {
 		if !reflect.DeepEqual(row, expectedRows[i]) {
-			log.Fatalf("Mismatch at row %d: got %v, want %v", i, row, expectedRows[i])
+			t.Fatalf("Mismatch at row %d: got %v, want %v", i, row, expectedRows[i])
 		}
 	}
 }
 
 func TestArrowWriteRead(t *testing.T) {
 	batchSize := 5
-	filePath := filepath.Join(os.TempDir(), "test.arrow")
+	filePath := filepath.Join(t.TempDir(), "test.arrow")
 	file, err := os.Create(filePath)
 	if err != nil {
 		t.Fatal(err)
@@ -197,13 +196,11 @@ func TestArrowWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, rows, false)
-
-	os.Remove(filePath)
+	checkArrowFile(t, filePath, rows, false)
 }
 
 func TestArrowWriterHandlesNullValues(t *testing.T) {
-	filePath := filepath.Join(os.TempDir(), "null_test.arrow")
+	filePath := filepath.Join(t.TempDir(), "null_test.arrow")
 	file, err := os.Create(filePath)
 	if err != nil {
 		t.Fatal(err)
@@ -271,16 +268,14 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, rows, false)
-
-	os.Remove(filePath)
+	checkArrowFile(t, filePath, rows, false)
 }
 
-func runConcurrentTest(compress bool) {
-	filePath := filepath.Join(os.TempDir(), "concurrent_output.feather")
+func conncurentTestMaybeCompress(t *testing.T, compress bool) {
+	filePath := filepath.Join(t.TempDir(), "concurrent_output.feather")
 	file, err := os.Create(filePath)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	defer file.Close()
 
@@ -295,7 +290,7 @@ func runConcurrentTest(compress bool) {
 	}
 
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
@@ -316,7 +311,7 @@ func runConcurrentTest(compress bool) {
 			batchSize := 1 + routineID%10
 			builder, err := NewArrowRowBuilder(writer, batchSize)
 			if err != nil {
-				log.Fatal(err)
+				t.Fatal(err)
 			}
 
 			defer wg.Done()
@@ -324,12 +319,12 @@ func runConcurrentTest(compress bool) {
 				rowToWrite := rows[routineID*numWritesPerRoutine+j]
 
 				if err := builder.WriteRow(rowToWrite); err != nil {
-					log.Fatal(err)
+					t.Fatal(err)
 				}
 			}
 
 			if err := builder.Release(); err != nil {
-				log.Fatal(err)
+				t.Fatal(err)
 			}
 		}(writer, i)
 	}
@@ -337,24 +332,22 @@ func runConcurrentTest(compress bool) {
 	wg.Wait()
 
 	if err := writer.Close(); err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, rows, true)
-
-	os.Remove(filePath)
+	checkArrowFile(t, filePath, rows, true)
 }
 
 func TestArrowWriterConcurrency(t *testing.T) {
-	runConcurrentTest(false)
+	conncurentTestMaybeCompress(t, false)
 }
 
 func TestArrowWriterConcurrencyWithCompression(t *testing.T) {
-	runConcurrentTest(true)
+	conncurentTestMaybeCompress(t, true)
 }
 
 func TestNewArrowIPCFileWriterWithZstdOption(t *testing.T) {
-	filePath := filepath.Join(os.TempDir(), "test.arrow")
+	filePath := filepath.Join(t.TempDir(), "test.arrow")
 	file, err := os.Create(filePath)
 	if err != nil {
 		t.Errorf("Unexpected error when creating file: %v", err)
@@ -368,6 +361,4 @@ func TestNewArrowIPCFileWriterWithZstdOption(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error when passing WithZstd as an option: %v", err)
 	}
-
-	os.Remove(filePath)
 }
