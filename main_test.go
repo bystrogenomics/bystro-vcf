@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -167,7 +169,9 @@ func TestHeader(t *testing.T) {
 }
 
 func TestWriteSampleListIfWanted(t *testing.T) {
-	config := Config{sampleListPath: "./test.sample_list"}
+	filePath := path.Join(t.TempDir(), "./test.sample_list")
+
+	config := Config{sampleListPath: filePath}
 
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
@@ -187,7 +191,7 @@ func TestWriteSampleListIfWanted(t *testing.T) {
 
 	readVcf(&config, reader, w)
 
-	inFh, err := os.Open("./test.sample_list")
+	inFh, err := os.Open(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -224,7 +228,8 @@ func TestWriteSampleListIfWanted(t *testing.T) {
 }
 
 func TestWriteSampleListWhenNoSamples(t *testing.T) {
-	config := Config{sampleListPath: "./test.sample_list_2"}
+	filePath := path.Join(t.TempDir(), "./test.sample_list_2")
+	config := Config{sampleListPath: filePath}
 
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
@@ -244,7 +249,7 @@ func TestWriteSampleListWhenNoSamples(t *testing.T) {
 
 	readVcf(&config, reader, w)
 
-	inFh, err := os.Open("./test.sample_list_2")
+	inFh, err := os.Open(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -655,7 +660,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields := append(sharedFieldsGT, "0|0", "0|0", "0|0", "0|0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf := float64(ac) / float64(an)
 
@@ -674,7 +679,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "0|1", "0|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -694,7 +699,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, ".|.", ".|.", ".|1", "1|.")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = 0
 
@@ -713,7 +718,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, ".|1", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -734,7 +739,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|.", "0|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -753,7 +758,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|1", "1|1", "0|1", "0|1", strconv.FormatFloat(sampleMaf, 'G', 3, 64))
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -772,7 +777,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 
 	sampleMaf = float64(ac) / float64(an)
 
@@ -794,7 +799,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -812,7 +817,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "1|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -830,7 +835,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "1|2|1:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -848,7 +853,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "1|2|1", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 0 && len(actualHets) == 1 {
@@ -866,7 +871,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "2|2|2:-0.03,-1.12,-5.00", "1|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00", "0|1:-0.03,-1.12,-5.00")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
@@ -884,7 +889,7 @@ func TestMakeHetHomozygotes(t *testing.T) {
 	fields = append(sharedFieldsGT, "2|2|2", "1|1", "0|1", "0|1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "2", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 {
@@ -911,7 +916,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields := append(sharedFieldsGT, "0", ".", "1", "0")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an := makeHetHomozygotes(fields, header, "1", true, true)
 	sampleMaf := float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
@@ -929,7 +934,7 @@ func TestMakeHetHomozygotesHaploid(t *testing.T) {
 	fields = append(sharedFieldsGTcomplex, "0:1", ".:1", "1:1", "0:1")
 
 	// The allele index we want to test is always 1...unless it's a multiallelic site
-	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1")
+	actualHoms, actualHets, missing, _, ac, an = makeHetHomozygotes(fields, header, "1", true, true)
 	sampleMaf = float64(ac) / float64(an)
 
 	if len(actualHoms) == 1 && len(actualHets) == 0 && len(missing) == 1 {
@@ -2904,6 +2909,8 @@ func TestManyAlleles(t *testing.T) {
 
 // test that we can write a genotype matrix
 func TestGenotypeMatrix(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "./test_genotype_matrix.feather")
+
 	versionLine := "##fileformat=VCFv4.x"
 	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
 	row1 := strings.Join([]string{"1", "1000", "rs1", "A", "T", ".", "PASS", "DP=100", "GT", "1|1", "0|1", "0|0"}, "\t")
@@ -2916,7 +2923,7 @@ func TestGenotypeMatrix(t *testing.T) {
 	reader := bufio.NewReader(strings.NewReader(lines))
 
 	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters,
-		dosageMatrixOutPath: "./test_genotype_matrix.feather"}
+		dosageMatrixOutPath: filePath}
 
 	byteBuf := new(bytes.Buffer)
 	w := bufio.NewWriter(byteBuf)
@@ -2924,7 +2931,7 @@ func TestGenotypeMatrix(t *testing.T) {
 	readVcf(&config, reader, w)
 
 	// Read dosage matrix
-	file, err := os.Open("./test_genotype_matrix.feather")
+	file, err := os.Open(filePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2947,17 +2954,17 @@ func TestGenotypeMatrix(t *testing.T) {
 		for rowIdx := 0; rowIdx < int(record.NumRows()); rowIdx++ {
 			switch record.Column(0).(*array.String).Value(rowIdx) {
 			case "chr1:1000:A:T":
-				genotypeS1 := record.Column(1).(*array.Int16).Value(rowIdx)
-				genotypeS2 := record.Column(2).(*array.Int16).Value(rowIdx)
-				genotypeS3 := record.Column(3).(*array.Int16).Value(rowIdx)
+				genotypeS1 := record.Column(1).(*array.Uint16).Value(rowIdx)
+				genotypeS2 := record.Column(2).(*array.Uint16).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Uint16).Value(rowIdx)
 
 				if genotypeS1 != 2 || genotypeS2 != 1 || genotypeS3 != 0 {
 					t.Error("NOT OK: Expected 2,1,0, got", genotypeS1, genotypeS2, genotypeS3)
 				}
 			case "chr2:200:C:G":
-				genotypeS1 := record.Column(1).(*array.Int16).Value(rowIdx)
-				genotypeS2 := record.Column(2).(*array.Int16).Value(rowIdx)
-				genotypeS3 := record.Column(3).(*array.Int16).Value(rowIdx)
+				genotypeS1 := record.Column(1).(*array.Uint16).Value(rowIdx)
+				genotypeS2 := record.Column(2).(*array.Uint16).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Uint16).Value(rowIdx)
 
 				if genotypeS1 != 1 || genotypeS2 != 0 || genotypeS3 != 2 {
 					t.Error("NOT OK: Expected 1,0,2, got", genotypeS1, genotypeS2, genotypeS3)
@@ -2971,7 +2978,7 @@ func TestGenotypeMatrix(t *testing.T) {
 					t.Error("NOT OK: Expected null value for S2")
 				}
 
-				genotypeS3 := record.Column(3).(*array.Int16).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Uint16).Value(rowIdx)
 
 				if genotypeS3 != 2 {
 					t.Error("NOT OK: Expected dosage of 2 for S3 got ", genotypeS3)
@@ -2980,8 +2987,57 @@ func TestGenotypeMatrix(t *testing.T) {
 				t.Fatal("Unknown row")
 			}
 		}
+	}
+}
 
-		//Clean up arrow file
-		os.Remove("./test_genotype_matrix.feather")
+// test that we can write a genotype matrix
+func TestNoOut(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "./test_genotype_matrix.feather")
+
+	versionLine := "##fileformat=VCFv4.x"
+	header := strings.Join([]string{"#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "S1", "S2", "S3"}, "\t")
+	row1 := strings.Join([]string{"1", "1000", "rs1", "A", "T", ".", "PASS", "DP=100", "GT", "1|1", "0|1", "0|0"}, "\t")
+
+	allowedFilters := map[string]bool{"PASS": true, ".": true}
+
+	lines := versionLine + "\n" + header + "\n" + row1 + "\n"
+	reader := bufio.NewReader(strings.NewReader(lines))
+
+	config := Config{emptyField: "!", fieldDelimiter: ";", allowedFilters: allowedFilters,
+		dosageMatrixOutPath: filePath, noOut: true}
+
+	byteBuf := new(bytes.Buffer)
+	w := bufio.NewWriter(byteBuf)
+
+	results := bufio.NewScanner(byteBuf)
+
+	readVcf(&config, reader, w)
+	w.Flush()
+
+	index := -1
+	for results.Scan() {
+		index++
+	}
+
+	if index != -1 {
+		t.Error("NOT OK: Expected no output")
+	}
+
+	// Read dosage matrix
+	file, err := os.Open(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	// Create a new IPC reader
+	arrowReader, err := ipc.NewFileReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer arrowReader.Close()
+
+	if arrowReader.NumRecords() == 0 {
+		t.Error("NOT OK: Expected to write dosage matrix")
 	}
 }

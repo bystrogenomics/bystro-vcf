@@ -2,8 +2,8 @@ package arrow
 
 import (
 	"fmt"
-	"log"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"sync"
@@ -137,11 +137,11 @@ func readArrowRows(filePath string) ([][]any, error) {
 	return readRows, nil
 }
 
-func readAndVerifyArrowFile(filePath string, expectedRows [][]any, sort bool) {
+func checkArrowFile(t *testing.T, filePath string, expectedRows [][]any, sort bool) {
 	readRows, err := readArrowRows(filePath)
 
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	if sort {
@@ -151,14 +151,18 @@ func readAndVerifyArrowFile(filePath string, expectedRows [][]any, sort bool) {
 
 	for i, row := range readRows {
 		if !reflect.DeepEqual(row, expectedRows[i]) {
-			log.Fatalf("Mismatch at row %d: got %v, want %v", i, row, expectedRows[i])
+			t.Fatalf("Mismatch at row %d: got %v, want %v", i, row, expectedRows[i])
 		}
 	}
 }
 
 func TestArrowWriteRead(t *testing.T) {
 	batchSize := 5
-	filePath := "test_matrix.feather"
+	filePath := filepath.Join(t.TempDir(), "test.arrow")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Define the data types for the fields
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
@@ -168,7 +172,7 @@ func TestArrowWriteRead(t *testing.T) {
 		rows[i] = []any{uint16(i), uint16(i + 1), uint16(i + 2)}
 	}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
+	writer, err := NewArrowIPCFileWriter(file, fieldNames, fieldTypes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,11 +196,16 @@ func TestArrowWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, rows, false)
+	checkArrowFile(t, filePath, rows, false)
 }
 
 func TestArrowWriterHandlesNullValues(t *testing.T) {
-	filePath := "null_values.feather"
+	filePath := filepath.Join(t.TempDir(), "null_test.arrow")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint8, arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint32, arrow.PrimitiveTypes.Uint64,
 		arrow.PrimitiveTypes.Int8, arrow.PrimitiveTypes.Int16, arrow.PrimitiveTypes.Int32, arrow.PrimitiveTypes.Int64,
 		arrow.PrimitiveTypes.Float32, arrow.PrimitiveTypes.Float64, arrow.BinaryTypes.String, arrow.FixedWidthTypes.Boolean}
@@ -235,7 +244,7 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 		fieldNames[i] = fmt.Sprintf("Field %d", i)
 	}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
+	writer, err := NewArrowIPCFileWriter(file, fieldNames, fieldTypes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,17 +268,29 @@ func TestArrowWriterHandlesNullValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, rows, false)
+	checkArrowFile(t, filePath, rows, false)
 }
 
-func runConcurrentTest(compress bool) {
-	filePath := "concurrent_output.feather"
+func conncurentTestMaybeCompress(t *testing.T, compress bool) {
+	filePath := filepath.Join(t.TempDir(), "concurrent_output.feather")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
 	fieldNames := []string{"Field1", "Field2"}
 	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Uint16, arrow.PrimitiveTypes.Uint16}
 
-	writer, err := NewArrowWriter(filePath, fieldNames, fieldTypes, nil)
+	var writer *ArrowWriter
+	if compress {
+		writer, err = NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
+	} else {
+		writer, err = NewArrowIPCFileWriter(file, fieldNames, fieldTypes)
+	}
+
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
@@ -290,7 +311,7 @@ func runConcurrentTest(compress bool) {
 			batchSize := 1 + routineID%10
 			builder, err := NewArrowRowBuilder(writer, batchSize)
 			if err != nil {
-				log.Fatal(err)
+				t.Fatal(err)
 			}
 
 			defer wg.Done()
@@ -298,12 +319,12 @@ func runConcurrentTest(compress bool) {
 				rowToWrite := rows[routineID*numWritesPerRoutine+j]
 
 				if err := builder.WriteRow(rowToWrite); err != nil {
-					log.Fatal(err)
+					t.Fatal(err)
 				}
 			}
 
 			if err := builder.Release(); err != nil {
-				log.Fatal(err)
+				t.Fatal(err)
 			}
 		}(writer, i)
 	}
@@ -311,16 +332,32 @@ func runConcurrentTest(compress bool) {
 	wg.Wait()
 
 	if err := writer.Close(); err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
-	readAndVerifyArrowFile(filePath, rows, true)
+	checkArrowFile(t, filePath, rows, true)
 }
 
 func TestArrowWriterConcurrency(t *testing.T) {
-	runConcurrentTest(false)
+	conncurentTestMaybeCompress(t, false)
 }
 
 func TestArrowWriterConcurrencyWithCompression(t *testing.T) {
-	runConcurrentTest(true)
+	conncurentTestMaybeCompress(t, true)
+}
+
+func TestNewArrowIPCFileWriterWithZstdOption(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "test.arrow")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Errorf("Unexpected error when creating file: %v", err)
+	}
+
+	fieldNames := []string{"field1", "field2"}
+	fieldTypes := []arrow.DataType{arrow.PrimitiveTypes.Int32, arrow.PrimitiveTypes.Float64}
+
+	_, err = NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
+	if err != nil {
+		t.Errorf("Unexpected error when passing WithZstd as an option: %v", err)
+	}
 }
