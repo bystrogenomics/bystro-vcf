@@ -500,7 +500,7 @@ func processLines(header []string, numChars int, config *Config, queue chan [][]
 	var arrowBuilder *bystroArrow.ArrowRowBuilder
 	var err error
 	if arrowWriter != nil {
-		arrowBuilder, err = bystroArrow.NewArrowRowBuilder(arrowWriter, 2e6)
+		arrowBuilder, err = bystroArrow.NewArrowRowBuilder(arrowWriter, 5e3)
 		if err != nil {
 			log.Fatal(err)
 		}
