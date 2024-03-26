@@ -305,26 +305,40 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 
 	var arrowWriter *bystroArrow.ArrowWriter
 	if config.dosageMatrixOutPath != "" {
-		sampleNames := header[sampleIdx:]
-		fieldNames := append([]string{"locus"}, sampleNames...)
+		if len(header) <= sampleIdx {
+			log.Print("No samples found in VCF file; writing empty dosage matrix file")
+			// Write empty file
+			file, err := os.Create(config.dosageMatrixOutPath)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		fieldTypes := make([]arrow.DataType, len(fieldNames))
-		fieldTypes[0] = arrow.BinaryTypes.String
-		for i := 1; i < len(fieldNames); i++ {
-			fieldTypes[i] = arrow.PrimitiveTypes.Uint16
-		}
+			file.Close()
 
-		file, err := os.Create(config.dosageMatrixOutPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer file.Close()
+			config.dosageMatrixOutPath = ""
+		} else {
+			sampleNames := header[sampleIdx:]
 
-		arrowWriter, err = bystroArrow.NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
-		if err != nil {
-			log.Fatal(err)
+			fieldNames := append([]string{"locus"}, sampleNames...)
+
+			fieldTypes := make([]arrow.DataType, len(fieldNames))
+			fieldTypes[0] = arrow.BinaryTypes.String
+			for i := 1; i < len(fieldNames); i++ {
+				fieldTypes[i] = arrow.PrimitiveTypes.Uint16
+			}
+
+			file, err := os.Create(config.dosageMatrixOutPath)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer file.Close()
+
+			arrowWriter, err = bystroArrow.NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer arrowWriter.Close()
 		}
-		defer arrowWriter.Close()
 	}
 
 	// Spawn threads
