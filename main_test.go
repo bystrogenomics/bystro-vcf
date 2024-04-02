@@ -2954,17 +2954,17 @@ func TestGenotypeMatrix(t *testing.T) {
 		for rowIdx := 0; rowIdx < int(record.NumRows()); rowIdx++ {
 			switch record.Column(0).(*array.String).Value(rowIdx) {
 			case "chr1:1000:A:T":
-				genotypeS1 := record.Column(1).(*array.Uint16).Value(rowIdx)
-				genotypeS2 := record.Column(2).(*array.Uint16).Value(rowIdx)
-				genotypeS3 := record.Column(3).(*array.Uint16).Value(rowIdx)
+				genotypeS1 := record.Column(1).(*array.Uint8).Value(rowIdx)
+				genotypeS2 := record.Column(2).(*array.Uint8).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Uint8).Value(rowIdx)
 
 				if genotypeS1 != 2 || genotypeS2 != 1 || genotypeS3 != 0 {
 					t.Error("NOT OK: Expected 2,1,0, got", genotypeS1, genotypeS2, genotypeS3)
 				}
 			case "chr2:200:C:G":
-				genotypeS1 := record.Column(1).(*array.Uint16).Value(rowIdx)
-				genotypeS2 := record.Column(2).(*array.Uint16).Value(rowIdx)
-				genotypeS3 := record.Column(3).(*array.Uint16).Value(rowIdx)
+				genotypeS1 := record.Column(1).(*array.Uint8).Value(rowIdx)
+				genotypeS2 := record.Column(2).(*array.Uint8).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Uint8).Value(rowIdx)
 
 				if genotypeS1 != 1 || genotypeS2 != 0 || genotypeS3 != 2 {
 					t.Error("NOT OK: Expected 1,0,2, got", genotypeS1, genotypeS2, genotypeS3)
@@ -2978,7 +2978,7 @@ func TestGenotypeMatrix(t *testing.T) {
 					t.Error("NOT OK: Expected null value for S2")
 				}
 
-				genotypeS3 := record.Column(3).(*array.Uint16).Value(rowIdx)
+				genotypeS3 := record.Column(3).(*array.Uint8).Value(rowIdx)
 
 				if genotypeS3 != 2 {
 					t.Error("NOT OK: Expected dosage of 2 for S3 got ", genotypeS3)
