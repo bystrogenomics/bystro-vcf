@@ -22,8 +22,10 @@ type ArrowWriter struct {
 // The ArrowWriter will write to filePath.
 // This writing operation is threadsafe.
 func NewArrowIPCFileWriter(f *os.File, fieldNames []string, fieldTypes []arrow.DataType, options ...ipc.Option) (*ArrowWriter, error) {
-	schema := makeSchema(fieldNames, fieldTypes)
+	return NewArrowIPCFileWriterWithSchema(f, makeSchema(fieldNames, fieldTypes), options...)
+}
 
+func NewArrowIPCFileWriterWithSchema(f *os.File, schema *arrow.Schema, options ...ipc.Option) (*ArrowWriter, error) {
 	schemaOption := ipc.WithSchema(schema)
 	writer, err := ipc.NewFileWriter(f, append([]ipc.Option{schemaOption}, options...)...)
 	if err != nil {
