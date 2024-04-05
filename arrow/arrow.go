@@ -12,7 +12,7 @@ import (
 )
 
 type ArrowWriter struct {
-	schema *arrow.Schema
+	Schema *arrow.Schema
 	writer *ipc.FileWriter
 	mu     sync.Mutex
 }
@@ -31,12 +31,12 @@ func NewArrowIPCFileWriter(f *os.File, fieldNames []string, fieldTypes []arrow.D
 	}
 
 	return &ArrowWriter{
-		schema: schema,
+		Schema: schema,
 		writer: writer,
 	}, nil
 }
 
-func (aw *ArrowWriter) writeChunk(record arrow.Record) error {
+func (aw *ArrowWriter) WriteChunk(record arrow.Record) error {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
@@ -73,7 +73,7 @@ type ArrowRowBuilder struct {
 // to write a chunk.
 func NewArrowRowBuilder(aw *ArrowWriter, chunkSize int) (*ArrowRowBuilder, error) {
 	pool := memory.NewGoAllocator()
-	builders, appendFuncs, err := makeBuilders(aw.schema, pool)
+	builders, appendFuncs, err := makeBuilders(aw.Schema, pool)
 
 	if err != nil {
 		return nil, err
@@ -124,10 +124,10 @@ func (arb *ArrowRowBuilder) writeChunk() error {
 		cols = append(cols, b.NewArray())
 	}
 
-	record := array.NewRecord(arb.arrowWriter.schema, cols, int64(arb.numRowsInChunk))
+	record := array.NewRecord(arb.arrowWriter.Schema, cols, int64(arb.numRowsInChunk))
 	defer record.Release()
 
-	if err := arb.arrowWriter.writeChunk(record); err != nil {
+	if err := arb.arrowWriter.WriteChunk(record); err != nil {
 		return err
 	}
 
