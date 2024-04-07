@@ -2956,26 +2956,23 @@ func TestGenotypeMatrix(t *testing.T) {
 			case "chr1:1000:A:T":
 				genotypeS1 := record.Column(1).(*array.Uint8).Value(rowIdx)
 				genotypeS2 := record.Column(2).(*array.Uint8).Value(rowIdx)
-				genotypeS3 := record.Column(3).(*array.Uint8).Value(rowIdx)
 
-				if genotypeS1 != 2 || genotypeS2 != 1 || genotypeS3 != 0 {
-					t.Error("NOT OK: Expected 2,1,0, got", genotypeS1, genotypeS2, genotypeS3)
+				// 1|1 -> 2, 0|1 -> 1, 0|0 -> nil
+				if genotypeS1 != 2 || genotypeS2 != 1 || !record.Column(3).IsNull(rowIdx) {
+					t.Error("NOT OK: Expected 2,1,nil, got", genotypeS1, genotypeS2, record.Column(2).(*array.Uint8).Value(rowIdx))
 				}
 			case "chr2:200:C:G":
 				genotypeS1 := record.Column(1).(*array.Uint8).Value(rowIdx)
-				genotypeS2 := record.Column(2).(*array.Uint8).Value(rowIdx)
 				genotypeS3 := record.Column(3).(*array.Uint8).Value(rowIdx)
 
-				if genotypeS1 != 1 || genotypeS2 != 0 || genotypeS3 != 2 {
-					t.Error("NOT OK: Expected 1,0,2, got", genotypeS1, genotypeS2, genotypeS3)
+				if genotypeS1 != 1 || !record.Column(2).IsNull(rowIdx) || genotypeS3 != 2 {
+					t.Error("NOT OK: Expected 1,0,2, got", genotypeS1, record.Column(2).(*array.Uint8).Value(rowIdx), genotypeS3)
 				}
 			case "chr22:300:G:T":
-				if !record.Column(1).IsNull(rowIdx) {
-					t.Error("NOT OK: Expected null value for S1")
-				}
-
-				if !record.Column(2).IsNull(rowIdx) {
-					t.Error("NOT OK: Expected null value for S2")
+				genotypeS1 := record.Column(1).(*array.Uint8).Value(rowIdx)
+				genotypeS2 := record.Column(2).(*array.Uint8).Value(rowIdx)
+				if genotypeS1 != 0 || genotypeS2 != 0 {
+					t.Error("NOT OK: Expected missing genotypes to be represented as 0, got", genotypeS1, genotypeS2)
 				}
 
 				genotypeS3 := record.Column(3).(*array.Uint8).Value(rowIdx)

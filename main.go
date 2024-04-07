@@ -1066,8 +1066,10 @@ SAMPLES:
 			if sampleGenotypeField[0] == '0' && sampleGenotypeField[2] == '0' {
 				totalGtCount += 2
 
+				// We encode reference dosages as nil, since they are the most common
+				// and Arrow only stores non-nil values (nils are held in a validity bitmask)
 				if needsDosages {
-					dosages = append(dosages, uint8(0))
+					dosages = append(dosages, nil)
 				}
 
 				continue SAMPLES
@@ -1115,8 +1117,9 @@ SAMPLES:
 					missing = append(missing, header[i])
 				}
 
+				// We encode missing dosages as 0, since nil is reserved for reference
 				if needsDosages {
-					dosages = append(dosages, nil)
+					dosages = append(dosages, uint8(0))
 				}
 
 				continue SAMPLES
@@ -1153,7 +1156,7 @@ SAMPLES:
 				}
 
 				if needsDosages {
-					dosages = append(dosages, nil)
+					dosages = append(dosages, uint8(0))
 				}
 
 				continue SAMPLES
@@ -1170,6 +1173,9 @@ SAMPLES:
 		totalAltCount += altCount
 
 		if needsDosages {
+			if altCount == 0 {
+				dosages = append(dosages, nil)
+			}
 			if altCount <= 255 {
 				dosages = append(dosages, uint8(altCount))
 			} else {
