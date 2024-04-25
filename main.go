@@ -1116,7 +1116,7 @@ SAMPLES:
 				}
 
 				if needsDosages {
-					dosages = append(dosages, -1)
+					dosages = append(dosages, int8(-1))
 				}
 
 				continue SAMPLES
@@ -1153,7 +1153,7 @@ SAMPLES:
 				}
 
 				if needsDosages {
-					dosages = append(dosages, -1)
+					dosages = append(dosages, int8(-1))
 				}
 
 				continue SAMPLES
