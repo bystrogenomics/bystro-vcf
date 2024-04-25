@@ -333,7 +333,7 @@ func readVcf(config *Config, reader *bufio.Reader, writer *bufio.Writer) {
 			}
 			defer file.Close()
 
-			arrowWriter, err = bystroArrow.NewArrowIPCFileWriter(file, fieldNames, fieldTypes, ipc.WithZstd())
+			arrowWriter, err = bystroArrow.NewArrowIPCFileWriter(file, fieldNames, fieldTypes, false, ipc.WithZstd())
 			if err != nil {
 				log.Fatal(err)
 			}

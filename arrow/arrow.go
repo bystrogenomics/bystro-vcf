@@ -21,8 +21,8 @@ type ArrowWriter struct {
 // must match. The number of rows in each chunk is determined by chunkSize.
 // The ArrowWriter will write to filePath.
 // This writing operation is threadsafe.
-func NewArrowIPCFileWriter(f *os.File, fieldNames []string, fieldTypes []arrow.DataType, options ...ipc.Option) (*ArrowWriter, error) {
-	return NewArrowIPCFileWriterWithSchema(f, makeSchema(fieldNames, fieldTypes), options...)
+func NewArrowIPCFileWriter(f *os.File, fieldNames []string, fieldTypes []arrow.DataType, nullable bool, options ...ipc.Option) (*ArrowWriter, error) {
+	return NewArrowIPCFileWriterWithSchema(f, makeSchema(fieldNames, fieldTypes, nullable), options...)
 }
 
 func NewArrowIPCFileWriterWithSchema(f *os.File, schema *arrow.Schema, options ...ipc.Option) (*ArrowWriter, error) {
@@ -321,10 +321,10 @@ func appendBool(builder array.Builder, val any) error {
 	return fmt.Errorf("type mismatch, expected bool")
 }
 
-func makeSchema(fieldNames []string, fieldTypes []arrow.DataType) *arrow.Schema {
+func makeSchema(fieldNames []string, fieldTypes []arrow.DataType, nullable bool) *arrow.Schema {
 	fields := make([]arrow.Field, len(fieldTypes))
 	for i, dataType := range fieldTypes {
-		fields[i] = arrow.Field{Name: fieldNames[i], Type: dataType, Nullable: true}
+		fields[i] = arrow.Field{Name: fieldNames[i], Type: dataType, Nullable: nullable}
 	}
 
 	schema := arrow.NewSchema(fields, nil)
