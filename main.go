@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/akotlar/bystro-utils/parse"
+	"github.com/bystrogenomics/bystro-utils/parse"
 	"github.com/apache/arrow/go/v14/arrow"
 	"github.com/apache/arrow/go/v14/arrow/ipc"
 	bystroArrow "github.com/bystrogenomics/bystro-vcf/arrow"
