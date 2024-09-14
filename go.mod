@@ -3,7 +3,6 @@ module github.com/bystrogenomics/bystro-vcf
 go 1.20
 
 require (
-	github.com/akotlar/bystro-utils v0.0.0-20180921004542-b5183a523f20
 	github.com/apache/arrow/go/v14 v14.0.2
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
@@ -12,6 +11,7 @@ require (
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/apache/thrift v0.17.0 // indirect
+	github.com/bystrogenomics/bystro-utils v0.0.0-20180921004542-b5183a523f20 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
